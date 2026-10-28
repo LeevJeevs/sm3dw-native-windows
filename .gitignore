@@ -12,3 +12,4 @@
 *.bmp
 *.log
 .vscode/
+__pycache__/
