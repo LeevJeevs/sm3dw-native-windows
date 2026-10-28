@@ -1,0 +1,14 @@
+# Game-derived or machine-local data: never commit (own game files, extracted data, generated code, builds, saves, logs)
+/work/
+/out/
+/build/
+/third_party/
+/transfer/
+*.rpx
+*.wua
+*.szs
+*.exe
+*.dll
+*.bmp
+*.log
+.vscode/

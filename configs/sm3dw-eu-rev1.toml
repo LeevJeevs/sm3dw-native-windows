@@ -1,0 +1,14 @@
+# Local profile for Super Mario 3D World (EU, Rev 1, WUP-P-ARDP). Written by us; upstream ships none.
+# Permissive: no hash gate, no hooks (no per-game HLE shortcuts are known yet).
+project_name = "Super Mario 3D World (EU Rev1)"
+target_prefix = "sm3dw"
+title_root = "work/title/0000000000000000_v0"
+[target]
+title_id = "0005000010145D00"
+product_code = "WUP-P-ARDP"
+
+[hle_hooks]
+# Yaz0 decompressor (standard algorithm; semantics checked against upstream's Yaz0Decode hook by reading the disassembly)
+"026BBC20" = "Yaz0Decode"
+# Streaming (resumable) Yaz0 decoder + its header helper; native transliteration, see native_hooks.cpp
+"026BBF1C" = "Yaz0DecodeStream"

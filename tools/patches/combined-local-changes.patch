@@ -1,0 +1,2883 @@
+diff --git a/nWiiURecomp/src/native_generator.cpp b/nWiiURecomp/src/native_generator.cpp
+index 0e99995..68dd7dd 100644
+--- a/nWiiURecomp/src/native_generator.cpp
++++ b/nWiiURecomp/src/native_generator.cpp
+@@ -112,10 +112,14 @@ void validate_instruction(const PpcInstruction& instruction) {
+             instruction.xo5() == 31) {
+             return;
+         }
+-        if ((instruction.xo5() == 20 || instruction.xo5() == 21) &&
++        if ((instruction.xo5() == 18 || instruction.xo5() == 20 ||
++             instruction.xo5() == 21) &&
+             instruction.frc() == 0) {
+             return;
+         }
++        if (xo == 72 && instruction.ra() == 0) {
++            return;
++        }
+         if (xo == 26 && instruction.ra() == 0) {
+             return;
+         }
+@@ -183,6 +187,7 @@ void validate_instruction(const PpcInstruction& instruction) {
+         }
+         throw std::invalid_argument("reserved update store form");
+     case 49:
++    case 51:
+         if (instruction.ra() != 0) {
+             return;
+         }
+@@ -261,6 +266,7 @@ void validate_instruction(const PpcInstruction& instruction) {
+         case 235:
+         case 266:
+         case 316:
++        case 284:
+         case 444:
+         case 459:
+         case 491:
+@@ -286,6 +292,10 @@ void validate_instruction(const PpcInstruction& instruction) {
+         case 712:
+         case 202:
+         case 714:
++        case 232:
++        case 744:
++        case 234:
++        case 746:
+             if (instruction.rb() == 0) {
+                 return;
+             }
+@@ -375,7 +385,7 @@ void validate_instruction(const PpcInstruction& instruction) {
+         if (instruction.rc()) {
+             break;
+         }
+-        if ((instruction.xo5() == 20 ||
++        if ((instruction.xo5() == 18 || instruction.xo5() == 20 ||
+              instruction.xo5() == 21) &&
+             instruction.frc() == 0) {
+             return;
+@@ -472,6 +482,9 @@ void emit_instruction(std::ostringstream& output,
+             output << "    nwii::runtime::ppc::" << name << "(cpu, "
+                    << instruction.rt() << ", " << instruction.ra() << ", "
+                    << instruction.rb() << ");\n";
++        } else if (xo == 72) {
++            output << "    nwii::runtime::ppc::ps_mr(cpu, "
++                   << instruction.rt() << ", " << instruction.rb() << ");\n";
+         } else if (xo == 40) {
+             output << "    nwii::runtime::ppc::ps_neg(cpu, "
+                    << instruction.rt() << ", " << instruction.rb() << ");\n";
+@@ -492,10 +505,13 @@ void emit_instruction(std::ostringstream& output,
+             output << "    nwii::runtime::ppc::" << name << "(cpu, "
+                    << instruction.rt() << ", " << instruction.ra() << ", "
+                    << instruction.frc() << ");\n";
+-        } else if (instruction.xo5() == 20 ||
++        } else if (instruction.xo5() == 18 ||
++                   instruction.xo5() == 20 ||
+                    instruction.xo5() == 21) {
+             output << "    nwii::runtime::ppc::"
+-                   << (instruction.xo5() == 20 ? "ps_sub" : "ps_add")
++                   << (instruction.xo5() == 18   ? "ps_div"
++                       : instruction.xo5() == 20 ? "ps_sub"
++                                                : "ps_add")
+                    << "(cpu, " << instruction.rt() << ", "
+                    << instruction.ra() << ", " << instruction.rb()
+                    << ");\n";
+@@ -751,6 +767,20 @@ void emit_instruction(std::ostringstream& output,
+                    << boolean(xo == 712) << ", "
+                    << boolean(instruction.rc()) << ");\n";
+             return;
++        case 232:
++        case 744:
++            output << "    nwii::runtime::ppc::subfme(cpu, "
++                   << instruction.rt() << ", " << instruction.ra() << ", "
++                   << boolean(xo == 744) << ", "
++                   << boolean(instruction.rc()) << ");\n";
++            return;
++        case 234:
++        case 746:
++            output << "    nwii::runtime::ppc::addme(cpu, "
++                   << instruction.rt() << ", " << instruction.ra() << ", "
++                   << boolean(xo == 746) << ", "
++                   << boolean(instruction.rc()) << ");\n";
++            return;
+         case 202:
+         case 714:
+             output << "    nwii::runtime::ppc::addze(cpu, "
+@@ -809,6 +839,7 @@ void emit_instruction(std::ostringstream& output,
+         case 536:
+         case 124:
+         case 316:
++        case 284:
+         case 28:
+         case 60:
+         case 412:
+@@ -826,6 +857,7 @@ void emit_instruction(std::ostringstream& output,
+                                : xo == 60  ? "andc"
+                                : xo == 124 ? "nor_"
+                                : xo == 316 ? "xor_"
++                               : xo == 284 ? "eqv"
+                                : xo == 444 ? "or_"
+                                : xo == 412 ? "orc"
+                                            : "srw";
+@@ -920,6 +952,7 @@ void emit_instruction(std::ostringstream& output,
+     case 48:
+     case 49:
+     case 50:
++    case 51:
+     case 52:
+     case 53:
+     case 54:
+@@ -927,6 +960,7 @@ void emit_instruction(std::ostringstream& output,
+         const char* name = opcode == 48   ? "lfs"
+                            : opcode == 49 ? "lfsu"
+                            : opcode == 50 ? "lfd"
++                           : opcode == 51 ? "lfdu"
+                            : opcode == 52 ? "stfs"
+                            : opcode == 53 ? "stfsu"
+                            : opcode == 54 ? "stfd"
+diff --git a/nWiiURecomp/src/project_generator.cpp b/nWiiURecomp/src/project_generator.cpp
+index 26c90f9..18f52cd 100644
+--- a/nWiiURecomp/src/project_generator.cpp
++++ b/nWiiURecomp/src/project_generator.cpp
+@@ -1,3 +1,5 @@
++#include <chrono>
++#include <thread>
+ #include "nwiiu/recomp/project_generator.h"
+ 
+ #include "nwiiu/analyzer/analysis.h"
+@@ -573,17 +575,34 @@ std::filesystem::path available_sibling(const std::filesystem::path& output,
+     }
+ }
+ 
++// Windows can deny renaming a directory while a scanner still holds handles on
++// freshly written files inside it, so retry with a short backoff.
++void rename_with_retry(const std::filesystem::path& from,
++                       const std::filesystem::path& to) {
++    for (int attempt = 0;; ++attempt) {
++        try {
++            std::filesystem::rename(from, to);
++            return;
++        } catch (const std::filesystem::filesystem_error&) {
++            if (attempt >= 60) {
++                throw;
++            }
++            std::this_thread::sleep_for(std::chrono::milliseconds(500));
++        }
++    }
++}
++
+ void replace_directory(const std::filesystem::path& temporary,
+                        const std::filesystem::path& output) {
+     if (!std::filesystem::exists(output)) {
+-        std::filesystem::rename(temporary, output);
++        rename_with_retry(temporary, output);
+         return;
+     }
+ 
+     const auto backup = available_sibling(output, ".nwiiu-backup-");
+-    std::filesystem::rename(output, backup);
++    rename_with_retry(output, backup);
+     try {
+-        std::filesystem::rename(temporary, output);
++        rename_with_retry(temporary, output);
+     } catch (...) {
+         std::filesystem::rename(backup, output);
+         throw;
+diff --git a/nWiiURuntime/include/runtime/cafe_abi.h b/nWiiURuntime/include/runtime/cafe_abi.h
+index 1ce28aa..0b83722 100644
+--- a/nWiiURuntime/include/runtime/cafe_abi.h
++++ b/nWiiURuntime/include/runtime/cafe_abi.h
+@@ -12,7 +12,11 @@ constexpr uint32_t kCafeSystemSize = kCafeSystemEnd - kCafeSystemStart;
+ // WWHD EU v0's RPX loader data, core stacks, exception stacks, and system
+ // heap leave page-aligned MEM2 at 0x10520000..0x4DFA0000.
+ constexpr uint32_t kMem1Heap = 0xF4000000;
+-constexpr uint32_t kMem2Heap = 0x10520000;
++#ifndef NWIIU_MEM2_HEAP_BASE
++#define NWIIU_MEM2_HEAP_BASE 0x10520000u
++#endif
++// Local change: overridable per target (-DNWIIU_MEM2_HEAP_BASE=...). Default is WWHD's.
++constexpr uint32_t kMem2Heap = NWIIU_MEM2_HEAP_BASE;
+ constexpr uint32_t kFgHeap = 0xE0000000;
+ constexpr uint32_t kMainThread = 0x01000000;
+ constexpr uint32_t kSecondThread = 0x010006A0;
+@@ -30,7 +34,7 @@ constexpr uint32_t kGhsErrno = kGhsFlocks + kGhsIobCount * sizeof(uint32_t);
+ 
+ constexpr uint32_t kMem1Start = 0xF400004C;
+ constexpr uint32_t kMem1End = 0xF6000000;
+-constexpr uint32_t kMem2Start = 0x10520054;
++constexpr uint32_t kMem2Start = NWIIU_MEM2_HEAP_BASE + 0x54;
+ constexpr uint32_t kMem2End = 0x4DFA0000;
+ constexpr uint32_t kFgStart = 0xE000004C;
+ constexpr uint32_t kFgEnd = 0xE2800000;
+diff --git a/nWiiURuntime/include/runtime/cafe_coreinit.h b/nWiiURuntime/include/runtime/cafe_coreinit.h
+index b74fd10..d5b016e 100644
+--- a/nWiiURuntime/include/runtime/cafe_coreinit.h
++++ b/nWiiURuntime/include/runtime/cafe_coreinit.h
+@@ -53,6 +53,8 @@ public:
+ 
+     uint32_t main_thread_address() const { return abi::kMainThread; }
+     uint64_t ticks() const { return ticks_; }
++    // LOCAL: fires due OS alarms (queues their guest callbacks). Called by Machine::run.
++    void service_alarms();
+     void advance_ticks(uint64_t delta) { ticks_ += delta; }
+     bool home_button_menu_enabled() const {
+         return home_button_menu_enabled_;
+@@ -148,6 +150,8 @@ private:
+     HleAction receive_message(CPUContext& cpu);
+     EventState& event(uint32_t address, uint32_t pc);
+     HleAction wait_event(CPUContext& cpu);
++    HleAction wait_event_timed(CPUContext& cpu);  // LOCAL: OSWaitEventWithTimeout
++    std::map<uint32_t, uint64_t> timed_event_waits_;  // thread -> deadline tick
+     HleAction signal_event(CPUContext& cpu, bool all);
+     static bool waiter_before(const MutexWaiter& left,
+                               const MutexWaiter& right);
+@@ -166,6 +170,8 @@ private:
+     std::array<uint32_t, 15> exception_callbacks_{};
+     uint16_t next_thread_id_{2};
+     uint64_t ticks_{};
++    std::vector<std::pair<uint32_t, std::string>> erreula_stub_names_;
++    std::vector<uint32_t> armed_alarms_;
+     std::map<uint32_t, EventState> events_;
+     uint64_t wait_sequence_{};
+     bool home_button_menu_enabled_{true};
+diff --git a/nWiiURuntime/include/runtime/machine.h b/nWiiURuntime/include/runtime/machine.h
+index 188492f..6d8df46 100644
+--- a/nWiiURuntime/include/runtime/machine.h
++++ b/nWiiURuntime/include/runtime/machine.h
+@@ -74,6 +74,8 @@ public:
+         callback_thread_address_ = 0;
+     }
+     void block_current(uint32_t wait_object);
++    // LOCAL: block on wait_object but also wake after delta_ticks (timed waits).
++    void block_current_timed(uint32_t wait_object, uint64_t delta_ticks);
+     void exit_current(int32_t value);
+     void block_thread(uint32_t thread_address, uint32_t wait_object);
+     void wake_thread(uint32_t thread_address);
+diff --git a/nWiiURuntime/include/runtime/memory.h b/nWiiURuntime/include/runtime/memory.h
+index 4e323a2..9ec151a 100644
+--- a/nWiiURuntime/include/runtime/memory.h
++++ b/nWiiURuntime/include/runtime/memory.h
+@@ -61,6 +61,11 @@ class GuestMemory {
+ public:
+     GuestMemory() = default;
+     explicit GuestMemory(GuestMemoryCallbacks callbacks);
++    // LOCAL: table_ holds pointers into pages_, so a copy would alias the source's pages.
++    GuestMemory(const GuestMemory&) = delete;
++    GuestMemory& operator=(const GuestMemory&) = delete;
++    GuestMemory(GuestMemory&&) = default;
++    GuestMemory& operator=(GuestMemory&&) = default;
+     void map(uint32_t address, uint32_t size, MemoryPermissions permissions,
+              std::span<const uint8_t> initial = {});
+     uint64_t mapped_bytes() const;
+@@ -70,6 +75,10 @@ public:
+     uint8_t read8(uint32_t address, uint32_t pc) const {
+         if (flat_base_ != nullptr)
+             return flat_base_[address];
++        const uint32_t pg = address >> 12;
++        if ((perm_[pg] & 1u) != 0) {
++            if (const uint8_t* p = table_[pg]) return p[address & 0xFFFu];
++        }
+         return read8_slow(address, pc);
+     }
+     uint16_t read16(uint32_t address, uint32_t pc) const {
+@@ -78,6 +87,14 @@ public:
+             std::memcpy(&raw, flat_base_ + address, sizeof raw);
+             return NWII_BSWAP16(raw);
+         }
++        const uint32_t pg = address >> 12, off = address & 0xFFFu;
++        if (off <= 0xFFEu && (perm_[pg] & 1u) != 0) {
++            if (const uint8_t* p = table_[pg]) {
++                uint16_t raw;
++                std::memcpy(&raw, p + off, sizeof raw);
++                return NWII_BSWAP16(raw);
++            }
++        }
+         return read16_slow(address, pc);
+     }
+     uint32_t read32(uint32_t address, uint32_t pc) const {
+@@ -86,6 +103,14 @@ public:
+             std::memcpy(&raw, flat_base_ + address, sizeof raw);
+             return NWII_BSWAP32(raw);
+         }
++        const uint32_t pg = address >> 12, off = address & 0xFFFu;
++        if (off <= 0xFFCu && (perm_[pg] & 1u) != 0) {
++            if (const uint8_t* p = table_[pg]) {
++                uint32_t raw;
++                std::memcpy(&raw, p + off, sizeof raw);
++                return NWII_BSWAP32(raw);
++            }
++        }
+         return read32_slow(address, pc);
+     }
+     uint64_t read64(uint32_t address, uint32_t pc) const {
+@@ -94,6 +119,14 @@ public:
+             std::memcpy(&raw, flat_base_ + address, sizeof raw);
+             return NWII_BSWAP64(raw);
+         }
++        const uint32_t pg = address >> 12, off = address & 0xFFFu;
++        if (off <= 0xFF8u && (perm_[pg] & 1u) != 0) {
++            if (const uint8_t* p = table_[pg]) {
++                uint64_t raw;
++                std::memcpy(&raw, p + off, sizeof raw);
++                return NWII_BSWAP64(raw);
++            }
++        }
+         return read64_slow(address, pc);
+     }
+     void write8(uint32_t address, uint8_t value, uint32_t pc) {
+@@ -101,6 +134,13 @@ public:
+             mutable_flat()[address] = value;
+             return;
+         }
++        const uint32_t pg = address >> 12;
++        if ((perm_[pg] & 2u) != 0) {
++            if (uint8_t* p = table_[pg]) {
++                p[address & 0xFFFu] = value;
++                return;
++            }
++        }
+         write8_slow(address, value, pc);
+     }
+     void write16(uint32_t address, uint16_t value, uint32_t pc) {
+@@ -109,6 +149,14 @@ public:
+             std::memcpy(mutable_flat() + address, &raw, sizeof raw);
+             return;
+         }
++        const uint32_t pg = address >> 12, off = address & 0xFFFu;
++        if (off <= 0xFFEu && (perm_[pg] & 2u) != 0) {
++            if (uint8_t* p = table_[pg]) {
++                const uint16_t raw = NWII_BSWAP16(value);
++                std::memcpy(p + off, &raw, sizeof raw);
++                return;
++            }
++        }
+         write16_slow(address, value, pc);
+     }
+     void write32(uint32_t address, uint32_t value, uint32_t pc) {
+@@ -117,6 +165,14 @@ public:
+             std::memcpy(mutable_flat() + address, &raw, sizeof raw);
+             return;
+         }
++        const uint32_t pg = address >> 12, off = address & 0xFFFu;
++        if (off <= 0xFFCu && (perm_[pg] & 2u) != 0) {
++            if (uint8_t* p = table_[pg]) {
++                const uint32_t raw = NWII_BSWAP32(value);
++                std::memcpy(p + off, &raw, sizeof raw);
++                return;
++            }
++        }
+         write32_slow(address, value, pc);
+     }
+     void write64(uint32_t address, uint64_t value, uint32_t pc) {
+@@ -125,6 +181,14 @@ public:
+             std::memcpy(mutable_flat() + address, &raw, sizeof raw);
+             return;
+         }
++        const uint32_t pg = address >> 12, off = address & 0xFFFu;
++        if (off <= 0xFF8u && (perm_[pg] & 2u) != 0) {
++            if (uint8_t* p = table_[pg]) {
++                const uint64_t raw = NWII_BSWAP64(value);
++                std::memcpy(p + off, &raw, sizeof raw);
++                return;
++            }
++        }
+         write64_slow(address, value, pc);
+     }
+     void read_bytes(uint32_t address, std::span<uint8_t> output,
+@@ -174,5 +238,10 @@ private:
+     const uint8_t* flat_base_{};
+     std::vector<Mapping> mappings_;
+     std::unordered_map<uint32_t, Page> pages_;
++    // LOCAL fast path: per 4 KiB page, permission bits (1=read, 2=write) for pages fully inside a
++    // mapping, and a pointer to its resident backing page (nullptr until first touched). Anything
++    // else falls through to the exact *_slow path, so fault behaviour is unchanged.
++    std::vector<uint8_t> perm_ = std::vector<uint8_t>(size_t{1} << 20, 0);
++    std::vector<uint8_t*> table_ = std::vector<uint8_t*>(size_t{1} << 20, nullptr);
+ };
+ }
+diff --git a/nWiiURuntime/include/runtime/ppc_semantics.h b/nWiiURuntime/include/runtime/ppc_semantics.h
+index 4c81b2a..699b070 100644
+--- a/nWiiURuntime/include/runtime/ppc_semantics.h
++++ b/nWiiURuntime/include/runtime/ppc_semantics.h
+@@ -58,6 +58,9 @@ void neg(CPUContext& cpu, uint32_t rt, uint32_t ra, bool rc);
+ void cntlzw(CPUContext& cpu, uint32_t ra, uint32_t rs, bool rc);
+ void and_(CPUContext& cpu, uint32_t ra, uint32_t rs, uint32_t rb, bool rc);
+ void andc(CPUContext& cpu, uint32_t ra, uint32_t rs, uint32_t rb, bool rc);
++void eqv(CPUContext& cpu, uint32_t ra, uint32_t rs, uint32_t rb, bool rc);
++void subfme(CPUContext& cpu, uint32_t rt, uint32_t ra, bool oe, bool rc);
++void addme(CPUContext& cpu, uint32_t rt, uint32_t ra, bool oe, bool rc);
+ void nor_(CPUContext& cpu, uint32_t ra, uint32_t rs, uint32_t rb, bool rc);
+ void mulhwu(CPUContext& cpu, uint32_t rt, uint32_t ra, uint32_t rb, bool rc);
+ void mulhw(CPUContext& cpu, uint32_t rt, uint32_t ra, uint32_t rb, bool rc);
+@@ -178,6 +181,8 @@ void psq_stu(CPUContext& cpu, GuestMemory& memory, uint32_t frs, uint32_t ra,
+ 
+ void lfs(CPUContext& cpu, GuestMemory& memory, uint32_t frt, uint32_t ra,
+          int32_t displacement);
++void lfdu(CPUContext& cpu, GuestMemory& memory, uint32_t frt, uint32_t ra,
++          int32_t displacement);
+ void lfsu(CPUContext& cpu, GuestMemory& memory, uint32_t frt, uint32_t ra,
+           int32_t displacement);
+ void lfd(CPUContext& cpu, GuestMemory& memory, uint32_t frt, uint32_t ra,
+@@ -227,6 +232,8 @@ void ps_merge10(CPUContext& cpu, uint32_t frt, uint32_t fra, uint32_t frb);
+ void ps_merge01(CPUContext& cpu, uint32_t frt, uint32_t fra, uint32_t frb);
+ void ps_merge11(CPUContext& cpu, uint32_t frt, uint32_t fra, uint32_t frb);
+ void ps_neg(CPUContext& cpu, uint32_t frt, uint32_t frb);
++void ps_mr(CPUContext& cpu, uint32_t frt, uint32_t frb);
++void ps_div(CPUContext& cpu, uint32_t frt, uint32_t fra, uint32_t frb);
+ void ps_muls0(CPUContext& cpu, uint32_t frt, uint32_t fra, uint32_t frc);
+ void ps_mul(CPUContext& cpu, uint32_t frt, uint32_t fra, uint32_t frc);
+ void ps_muls1(CPUContext& cpu, uint32_t frt, uint32_t fra, uint32_t frc);
+diff --git a/nWiiURuntime/include/runtime/ppc_semantics_inl.h b/nWiiURuntime/include/runtime/ppc_semantics_inl.h
+index 9587571..768878e 100644
+--- a/nWiiURuntime/include/runtime/ppc_semantics_inl.h
++++ b/nWiiURuntime/include/runtime/ppc_semantics_inl.h
+@@ -418,6 +418,23 @@ inline void subfe(CPUContext& cpu, uint32_t rt, uint32_t ra, uint32_t rb, bool r
+     }
+     cpu.pc += 4;
+ }
++// subfme: rt = ~ra + CA - 1
++inline void subfme(CPUContext& cpu, uint32_t rt, uint32_t ra, bool oe, bool rc) {
++    const uint32_t a = cpu.gpr[ra];
++    const uint32_t carry_in = (cpu.xer & kXerCa) != 0;
++    const uint64_t result = static_cast<uint64_t>(~a) + carry_in + 0xFFFFFFFFULL;
++    cpu.gpr[rt] = static_cast<uint32_t>(result);
++    set_ca(cpu, (result >> 32) != 0);
++    if (oe) {
++        const int64_t s = static_cast<int64_t>(static_cast<int32_t>(~a)) +
++                          static_cast<int64_t>(carry_in) - 1;
++        set_ov(cpu, s != static_cast<int32_t>(s));
++    }
++    if (rc) {
++        set_integer_cr(cpu, 0, cpu.gpr[rt]);
++    }
++    cpu.pc += 4;
++}
+ inline void subfze(CPUContext& cpu, uint32_t rt, uint32_t ra, bool oe, bool rc) {
+     const uint32_t a = cpu.gpr[ra];
+     const bool carry_in = (cpu.xer & kXerCa) != 0;
+@@ -466,6 +483,14 @@ inline void andc(CPUContext& cpu, uint32_t ra, uint32_t rs, uint32_t rb, bool rc
+     cpu.pc += 4;
+ }
+ 
++inline void eqv(CPUContext& cpu, uint32_t ra, uint32_t rs, uint32_t rb, bool rc) {
++    cpu.gpr[ra] = ~(cpu.gpr[rs] ^ cpu.gpr[rb]);
++    if (rc) {
++        set_integer_cr(cpu, 0, cpu.gpr[ra]);
++    }
++    cpu.pc += 4;
++}
++
+ inline void nor_(CPUContext& cpu, uint32_t ra, uint32_t rs, uint32_t rb, bool rc) {
+     cpu.gpr[ra] = ~(cpu.gpr[rs] | cpu.gpr[rb]);
+     if (rc) {
+@@ -552,6 +577,23 @@ inline void addc(CPUContext& cpu, uint32_t rt, uint32_t ra, uint32_t rb, bool rc
+     }
+     cpu.pc += 4;
+ }
++// addme: rt = ra + CA - 1
++inline void addme(CPUContext& cpu, uint32_t rt, uint32_t ra, bool oe, bool rc) {
++    const uint32_t a = cpu.gpr[ra];
++    const uint32_t carry_in = (cpu.xer & kXerCa) != 0;
++    const uint64_t result = static_cast<uint64_t>(a) + carry_in + 0xFFFFFFFFULL;
++    cpu.gpr[rt] = static_cast<uint32_t>(result);
++    set_ca(cpu, (result >> 32) != 0);
++    if (oe) {
++        const int64_t s = static_cast<int64_t>(static_cast<int32_t>(a)) +
++                          static_cast<int64_t>(carry_in) - 1;
++        set_ov(cpu, s != static_cast<int32_t>(s));
++    }
++    if (rc) {
++        set_integer_cr(cpu, 0, cpu.gpr[rt]);
++    }
++    cpu.pc += 4;
++}
+ inline void addze(CPUContext& cpu, uint32_t rt, uint32_t ra, bool oe, bool rc) {
+     const uint32_t a = cpu.gpr[ra];
+     const bool carry_in = (cpu.xer & kXerCa) != 0;
+@@ -1116,6 +1158,15 @@ inline void lfsu(CPUContext& cpu, GuestMemory& memory, uint32_t frt, uint32_t ra
+ }
+ 
+ 
++inline void lfdu(CPUContext& cpu, GuestMemory& memory, uint32_t frt, uint32_t ra,
++           int32_t displacement) {
++    require_update_form(cpu, frt, ra, false);
++    const uint32_t address = cpu.gpr[ra] + static_cast<uint32_t>(displacement);
++    cpu.fpr[frt][0] = memory.read64(address, cpu.pc);
++    cpu.gpr[ra] = address;
++    cpu.pc += 4;
++}
++
+ inline void lfd(CPUContext& cpu, GuestMemory& memory, uint32_t frt, uint32_t ra,
+          int32_t displacement) {
+     const uint32_t address = effective_address(cpu, ra, displacement);
+@@ -1383,6 +1434,26 @@ inline void ps_merge11(CPUContext& cpu, uint32_t frt, uint32_t fra, uint32_t frb
+     cpu.pc += 4;
+ }
+ 
++inline void ps_mr(CPUContext& cpu, uint32_t frt, uint32_t frb) {
++    const uint64_t lane0 = cpu.fpr[frb][0];
++    const uint64_t lane1 = cpu.fpr[frb][1];
++    cpu.fpr[frt][0] = lane0;
++    cpu.fpr[frt][1] = lane1;
++    cpu.pc += 4;
++}
++
++inline void ps_div(CPUContext& cpu, uint32_t frt, uint32_t fra, uint32_t frb) {
++    const float lane0 =
++        static_cast<float>(std::bit_cast<double>(cpu.fpr[fra][0])) /
++        static_cast<float>(std::bit_cast<double>(cpu.fpr[frb][0]));
++    const float lane1 =
++        static_cast<float>(std::bit_cast<double>(cpu.fpr[fra][1])) /
++        static_cast<float>(std::bit_cast<double>(cpu.fpr[frb][1]));
++    cpu.fpr[frt][0] = std::bit_cast<uint64_t>(static_cast<double>(lane0));
++    cpu.fpr[frt][1] = std::bit_cast<uint64_t>(static_cast<double>(lane1));
++    cpu.pc += 4;
++}
++
+ inline void ps_neg(CPUContext& cpu, uint32_t frt, uint32_t frb) {
+     cpu.fpr[frt][0] = cpu.fpr[frb][0] ^ (uint64_t{1} << 63);
+     cpu.fpr[frt][1] = cpu.fpr[frb][1] ^ (uint64_t{1} << 63);
+diff --git a/nWiiURuntime/include/runtime/wwhd_gpu.h b/nWiiURuntime/include/runtime/wwhd_gpu.h
+index 318a70c..8303c52 100644
+--- a/nWiiURuntime/include/runtime/wwhd_gpu.h
++++ b/nWiiURuntime/include/runtime/wwhd_gpu.h
+@@ -31,7 +31,8 @@ public:
+     };
+ 
+     WwhdGpu() {
+-        device_ = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, true,
++        // LOCAL: debug validation off (needs the Vulkan SDK's validation layer, absent here).
++        device_ = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, false,
+                                       "vulkan");
+         if (device_ == nullptr) {
+             fail("SDL_CreateGPUDevice");
+@@ -51,13 +52,26 @@ public:
+         }
+     }
+ 
++    // LOCAL: draws are batched into one open command buffer; everything else flushes it first so
++    // submission order matches call order.
++    void flush() {
++        if (open_ != nullptr) {
++            auto* command = open_;
++            open_ = nullptr;
++            open_draws_ = 0;
++            submit(command);
++        }
++    }
++
+     void wait_idle() {
++        flush();
+         if (!SDL_WaitForGPUIdle(device_)) {
+             fail("SDL_WaitForGPUIdle");
+         }
+     }
+ 
+     ~WwhdGpu() {
++        flush();
+         SDL_WaitForGPUIdle(device_);
+         for (const auto& [key, pipeline] : pipelines_) {
+             static_cast<void>(key);
+@@ -169,7 +183,10 @@ public:
+         transfers.reserve(streams.size() + 1);
+         vertex_bindings.reserve(streams.size());
+ 
+-        auto* command = command_buffer();
++        if (open_ == nullptr) {
++            open_ = command_buffer();
++        }
++        auto* command = open_;
+         auto* copy = SDL_BeginGPUCopyPass(command);
+         for (const auto& stream : streams) {
+             auto [buffer, transfer] = upload_buffer(
+@@ -214,7 +231,9 @@ public:
+         }
+         SDL_DrawGPUIndexedPrimitives(pass, indices.size(), 1, 0, 0, 0);
+         SDL_EndGPURenderPass(pass);
+-        submit(command);
++        if (++open_draws_ >= 128) {
++            flush();
++        }
+         for (auto* transfer : transfers) {
+             SDL_ReleaseGPUTransferBuffer(device_, transfer);
+         }
+@@ -259,7 +278,11 @@ private:
+                                  SDL_GetError());
+     }
+ 
++    SDL_GPUCommandBuffer* open_ = nullptr;
++    uint32_t open_draws_ = 0;
++
+     SDL_GPUCommandBuffer* command_buffer() {
++        flush();
+         auto* command = SDL_AcquireGPUCommandBuffer(device_);
+         if (command == nullptr) {
+             fail("SDL_AcquireGPUCommandBuffer");
+diff --git a/nWiiURuntime/include/runtime/wwhd_renderer.h b/nWiiURuntime/include/runtime/wwhd_renderer.h
+index eb5d93b..c661c47 100644
+--- a/nWiiURuntime/include/runtime/wwhd_renderer.h
++++ b/nWiiURuntime/include/runtime/wwhd_renderer.h
+@@ -10,6 +10,8 @@
+ 
+ #include <algorithm>
+ #include <array>
++#include <chrono>
++#include <cmath>
+ #include <bit>
+ #include <cstdint>
+ #include <cstdio>
+@@ -18,9 +20,11 @@
+ #include <fstream>
+ #include <map>
+ #include <memory>
++#include <optional>
+ #include <set>
+ #include <stdexcept>
+ #include <string>
++#include <string_view>
+ #include <tuple>
+ #include <utility>
+ #include <vector>
+@@ -34,13 +38,13 @@ public:
+         if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
+             fail("SDL_Init");
+         }
+-        window_ = SDL_CreateWindow("The Wind Waker HD", 1280, 720,
++        window_ = SDL_CreateWindow("Super Mario 3D World (native port, work in progress)", 1280, 720,
+                                    SDL_WINDOW_RESIZABLE);
+         if (window_ == nullptr) {
+             SDL_Quit();
+             fail("SDL_CreateWindow");
+         }
+-        renderer_ = SDL_CreateRenderer(window_, "vulkan");
++        renderer_ = SDL_CreateRenderer(window_, nullptr);  // LOCAL: any available backend (was "vulkan", which this SDL3 build lacks)
+         if (renderer_ == nullptr) {
+             SDL_DestroyWindow(window_);
+             window_ = nullptr;
+@@ -122,7 +126,11 @@ public:
+         if (key[SDL_SCANCODE_RETURN] || key[SDL_SCANCODE_SPACE]) {
+             buttons |= 1u << 15;
+         }
+-        if (std::getenv("NWIIU_AUTO_A") != nullptr && swap_count_ < 2 &&
++        // LOCAL: NWIIU_AUTO_A=all keeps tapping A (every 500 ms) for the whole run; any other
++        // value keeps the original behaviour (first two swaps only).
++        if (const char* auto_a = std::getenv("NWIIU_AUTO_A");
++            auto_a != nullptr &&
++            (swap_count_ < 2 || std::string_view{auto_a} == "all") &&
+             (SDL_GetTicks() / 500) % 2 == 0) {
+             buttons |= 1u << 15;
+         }
+@@ -532,6 +540,42 @@ private:
+         }
+     }
+ 
++    // LOCAL (SM3DW): 16-bit packed colour (big-endian in guest memory).
++    // kind 0 = R5G6B5, 1 = R5G5B5A1, 2 = R4G4B4A4. Format ids per GX2SurfaceFormat as recalled
++    // (0x08 / 0x0A / 0x0B); alpha-bit ordering for 5551/4444 is unverified.
++    void decode_packed16(const Surface& surface, std::vector<uint8_t>& pixels,
++                         int kind) const {
++        for (uint32_t y = 0; y < surface.height; ++y) {
++            for (uint32_t x = 0; x < surface.width; ++x) {
++                const uint32_t source = tiled_offset(
++                    x, y, surface.pitch, surface.mode, surface.swizzle, 2);
++                if (source + 2 > surface.image_size) {
++                    throw std::runtime_error("packed16 pixel exceeds GX2 surface");
++                }
++                const uint16_t value = static_cast<uint16_t>(
++                    (image_.memory.read8(surface.image + source, 0) << 8) |
++                    image_.memory.read8(surface.image + source + 1, 0));
++                std::array<uint8_t, 4> rgba{};
++                if (kind == 0) {
++                    rgba = rgb565(value);
++                } else if (kind == 1) {
++                    rgba = {static_cast<uint8_t>(((value >> 11) & 31u) * 255u / 31u),
++                            static_cast<uint8_t>(((value >> 6) & 31u) * 255u / 31u),
++                            static_cast<uint8_t>(((value >> 1) & 31u) * 255u / 31u),
++                            static_cast<uint8_t>((value & 1u) ? 255 : 0)};
++                } else {
++                    rgba = {static_cast<uint8_t>(((value >> 12) & 15u) * 17u),
++                            static_cast<uint8_t>(((value >> 8) & 15u) * 17u),
++                            static_cast<uint8_t>(((value >> 4) & 15u) * 17u),
++                            static_cast<uint8_t>((value & 15u) * 17u)};
++                }
++                const size_t destination =
++                    (static_cast<size_t>(y) * surface.width + x) * 4;
++                for (size_t c = 0; c < 4; ++c) pixels[destination + c] = rgba[c];
++            }
++        }
++    }
++
+     void decode_rg8(const Surface& surface,
+                     std::vector<uint8_t>& pixels) const {
+         for (uint32_t y = 0; y < surface.height; ++y) {
+@@ -573,6 +617,40 @@ private:
+         }
+     }
+ 
++    // LOCAL (approximation): FLOAT RG16 (GX2 0x810) clamped to 0..1 and stored as RGBA8; HDR range is lost.
++    static float half_to_float(uint16_t h) {
++        const uint32_t sign = (h >> 15) & 1u, exp = (h >> 10) & 31u, man = h & 1023u;
++        float v;
++        if (exp == 0) v = std::ldexp(static_cast<float>(man), -24);
++        else if (exp == 31) v = man ? 0.0f : 65504.0f;
++        else v = std::ldexp(static_cast<float>(man | 1024u), static_cast<int>(exp) - 25);
++        return sign ? -v : v;
++    }
++
++    void decode_rg16_float(const Surface& surface,
++                           std::vector<uint8_t>& pixels) const {
++        for (uint32_t y = 0; y < surface.height; ++y) {
++            for (uint32_t x = 0; x < surface.width; ++x) {
++                const uint32_t source = tiled_offset(
++                    x, y, surface.pitch, surface.mode, surface.swizzle, 4);
++                if (source + 4 > surface.image_size) {
++                    throw std::runtime_error("RG16 float pixel exceeds GX2 surface");
++                }
++                const size_t destination =
++                    (static_cast<size_t>(y) * surface.width + x) * 4;
++                for (uint32_t c = 0; c < 2; ++c) {
++                    const uint16_t h = static_cast<uint16_t>(
++                        (image_.memory.read8(surface.image + source + c * 2, 0) << 8) |
++                        image_.memory.read8(surface.image + source + c * 2 + 1, 0));
++                    pixels[destination + c] = static_cast<uint8_t>(
++                        std::clamp(half_to_float(h), 0.0f, 1.0f) * 255.0f);
++                }
++                pixels[destination + 2] = 0;
++                pixels[destination + 3] = 255;
++            }
++        }
++    }
++
+     void decode_r32_float(const Surface& surface,
+                           std::vector<uint8_t>& pixels) const {
+         for (uint32_t y = 0; y < surface.height; ++y) {
+@@ -641,6 +719,15 @@ private:
+         case 0x07:
+             decode_rg8(value, pixels);
+             break;
++        case 0x08:
++            decode_packed16(value, pixels, 0);
++            break;
++        case 0x0A:
++            decode_packed16(value, pixels, 1);
++            break;
++        case 0x0B:
++            decode_packed16(value, pixels, 2);
++            break;
+         case 0x19:
+         case 0x1A:
+             decode_rgba8(value, pixels);
+@@ -648,6 +735,9 @@ private:
+         case 0x0E:
+             decode_r32_float(value, pixels);
+             break;
++        case 0x10:
++            decode_rg16_float(value, pixels);
++            break;
+         case 0x31:
+             decode_bc1(value, pixels);
+             break;
+@@ -945,6 +1035,7 @@ private:
+         case 0x19:
+         case 0x1A: decode_rgba8(value, pixels); break;
+         case 0x0E: decode_r32_float(value, pixels); break;
++        case 0x10: decode_rg16_float(value, pixels); break;
+         case 0x31: decode_bc1(value, pixels); break;
+         case 0x33: decode_bc3(value, pixels); break;
+         case 0x34: decode_bc4(value, pixels); break;
+@@ -1049,6 +1140,8 @@ private:
+     }
+ 
+ 
++    std::map<uint64_t, std::optional<LatteTranslation>> translation_cache_;
++
+     LatteTranslation translate_shader(const Gx2State& state) {
+         const auto words = [this](uint32_t address, uint32_t count) {
+             std::vector<uint32_t> values(count);
+@@ -1072,11 +1165,47 @@ private:
+         const auto vs = bytes(state.vertex_shader_address, 0xD0, 0xD4);
+         const auto ps = bytes(state.pixel_shader_address, 0xA4, 0xA8);
+         const auto fs = bytes(state.fetch_shader_address, 0x08, 0x0C);
+-        return translate_latte({vs_regs, vs, ps_regs, ps, fs});
++        // LOCAL: translate_latte runs a GLSL generator plus two shaderc compiles, and this used to
++        // run on every draw call. Cache by a content hash (addresses can be reused for different
++        // shaders), and remember failures so they are not retried per draw.
++        uint64_t key = 1469598103934665603ull;  // FNV-1a
++        const auto mix = [&key](const uint8_t* data, size_t size) {
++            for (size_t i = 0; i < size; ++i) {
++                key = (key ^ data[i]) * 1099511628211ull;
++            }
++            key = (key ^ 0xFFu) * 1099511628211ull;  // separator between inputs
++        };
++        mix(reinterpret_cast<const uint8_t*>(vs_regs.data()), vs_regs.size() * 4);
++        mix(reinterpret_cast<const uint8_t*>(ps_regs.data()), ps_regs.size() * 4);
++        mix(vs.data(), vs.size());
++        mix(ps.data(), ps.size());
++        mix(fs.data(), fs.size());
++        if (const auto found = translation_cache_.find(key);
++            found != translation_cache_.end()) {
++            if (!found->second.has_value()) {
++                throw std::runtime_error("cached Latte translation failure");
++            }
++            return *found->second;
++        }
++        try {
++            auto result = translate_latte({vs_regs, vs, ps_regs, ps, fs});
++            translation_cache_.emplace(key, result);
++            return result;
++        } catch (const std::exception& error) {
++            translation_cache_.emplace(key, std::nullopt);
++            if (std::getenv("NWIIU_RENDER_FAIL_TRACE") != nullptr) {
++                std::string what = error.what();
++                std::fprintf(stderr, "LATTE-TRANSLATE-FAIL vs=%08X ps=%08X: %.300s", state.vertex_shader_address,
++                             state.pixel_shader_address, what.c_str());
++                std::fputc(10, stderr);
++            }
++            throw;
++        }
+     }
+ 
+     static std::pair<SDL_GPUVertexElementFormat, uint32_t>
+-    gpu_vertex_format(uint32_t format) {
++    gpu_vertex_format(const LatteVertexInput& input) {
++        const uint32_t format = input.data_format;
+         switch (format) {
+         case 13:
+         case 14: return {SDL_GPU_VERTEXELEMENTFORMAT_FLOAT, 1};
+@@ -1086,6 +1215,14 @@ private:
+         case 48: return {SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, 3};
+         case 34:
+         case 35: return {SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, 4};
++        case 26:  // LOCAL: FMT_8_8_8_8 is one 32-bit word per vertex; normalized only.
++            if (input.num_format != 0) {
++                throw std::runtime_error("unsupported GPU 8_8_8_8 numeric format " +
++                                         std::to_string(input.num_format));
++            }
++            return {input.is_signed ? SDL_GPU_VERTEXELEMENTFORMAT_BYTE4_NORM
++                                    : SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM,
++                    1};
+         default:
+             throw std::runtime_error("unsupported GPU vertex format " +
+                                      std::to_string(format));
+@@ -1136,7 +1273,7 @@ private:
+                 return false;
+             }
+             const auto [format, components] =
+-                gpu_vertex_format(input.data_format);
++                gpu_vertex_format(input);
+             const uint32_t vertices = source.size / source.stride;
+             WwhdGpu::VertexStream stream{
+                 input.semantic, format, components * 4, {}};
+@@ -1728,9 +1865,10 @@ private:
+             dir != nullptr && swap_count_ % dump_interval == 0) {
+             std::filesystem::create_directories(dir);
+             std::fprintf(stderr,
+-                         "FRAME swap=%llu scan1=%p %ux%u draw_count=%llu "
++                         "FRAME t=%llums swap=%llu scan1=%p %ux%u draw_count=%llu "
+                          "scan_copy_count=%llu flush_count=%u "
+                          "vsync_wait_count=%llu\n",
++                         static_cast<unsigned long long>(SDL_GetTicks()),
+                          static_cast<unsigned long long>(swap_count_),
+                          static_cast<void*>(source.texture), source.width,
+                          source.height,
+@@ -1913,6 +2051,28 @@ private:
+                              const Gx2State& state) {
+         auto& self = *static_cast<WwhdRenderer*>(context);
+         const bool dumping = std::getenv("NWIIU_SHADER_DUMP") != nullptr;
++        // LOCAL: NWIIU_PERF=1 prints where wall time goes (renderer events vs. everything else).
++        static const bool perf = std::getenv("NWIIU_PERF") != nullptr;
++        static uint64_t ev_ns[4]{}, ev_n[4]{}, last_swap_ns = 0, frames = 0;
++        const auto t0 = std::chrono::steady_clock::now();
++        struct PerfScope {
++            bool on; std::chrono::steady_clock::time_point t0; Gx2Event e;
++            ~PerfScope() {
++                if (!on) return;
++                const auto dt = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
++                    std::chrono::steady_clock::now() - t0).count());
++                ev_ns[static_cast<int>(e)] += dt; ++ev_n[static_cast<int>(e)];
++                if (e == Gx2Event::swap_scan_buffers && ++frames % 30 == 0) {
++                    const uint64_t now = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
++                        std::chrono::steady_clock::now().time_since_epoch()).count());
++                    std::fprintf(stderr, "PERF 30 frames: wall %.0f ms | clear %.0f ms (%llu) draw %.0f ms (%llu) copy %.0f ms (%llu) swap %.0f ms\n",
++                        (now - last_swap_ns) / 1e6, ev_ns[0] / 1e6, (unsigned long long)ev_n[0], ev_ns[1] / 1e6,
++                        (unsigned long long)ev_n[1], ev_ns[2] / 1e6, (unsigned long long)ev_n[2], ev_ns[3] / 1e6);
++                    for (int i = 0; i < 4; ++i) ev_ns[i] = ev_n[i] = 0;
++                    last_swap_ns = now;
++                }
++            }
++        } perf_scope{perf, t0, event};
+         try {
+             switch (event) {
+             case Gx2Event::clear_color:
+diff --git a/nWiiURuntime/src/cafe_coreinit.cpp b/nWiiURuntime/src/cafe_coreinit.cpp
+index d439086..c9d3cb4 100644
+--- a/nWiiURuntime/src/cafe_coreinit.cpp
++++ b/nWiiURuntime/src/cafe_coreinit.cpp
+@@ -1,3 +1,9 @@
++#include <set>
++#include <zlib.h>
++#include <map>
++#include <memory>
++#include <vector>
++#include <cstdio>
+ #include "runtime/cafe_coreinit.h"
+ 
+ #include "runtime/cafe_runtime.h"
+@@ -800,6 +806,40 @@ CafeCoreinit::EventState& CafeCoreinit::event(uint32_t address, uint32_t pc) {
+     return found->second;
+ }
+ 
++void CafeCoreinit::service_alarms() {
++    if (machine_ == nullptr || armed_alarms_.empty()) {
++        return;
++    }
++    static const bool no_alarms = std::getenv("NWIIU_NO_ALARMS") != nullptr;  // LOCAL experiment
++    if (no_alarms) {
++        return;
++    }
++    const uint64_t now = machine_->current_time_ticks();
++    for (size_t index = 0; index < armed_alarms_.size();) {
++        const uint32_t alarm = armed_alarms_[index];
++        if (abi::read_u32(memory_, alarm, abi::kAlarmTagOffset, 0) != abi::kOsAlarmTag ||
++            abi::read_u32(memory_, alarm, abi::kAlarmStateOffset, 0) != 1) {
++            armed_alarms_.erase(armed_alarms_.begin() + static_cast<std::ptrdiff_t>(index));
++            continue;
++        }
++        uint64_t next = abi::read_u64(memory_, alarm, abi::kAlarmNextFireOffset, 0);
++        if (now >= next) {
++            const uint32_t callback = abi::read_u32(memory_, alarm, abi::kAlarmCallbackOffset, 0);
++            const uint64_t period = abi::read_u64(memory_, alarm, abi::kAlarmPeriodOffset, 0);
++            machine_->queue_callback(callback, alarm, true);
++            if (period != 0) {
++                next += period * (1 + (now - next) / period);
++                abi::write_u64(memory_, alarm, abi::kAlarmNextFireOffset, next, 0);
++            } else {
++                abi::write_u32(memory_, alarm, abi::kAlarmStateOffset, 0, 0);
++                armed_alarms_.erase(armed_alarms_.begin() + static_cast<std::ptrdiff_t>(index));
++                continue;
++            }
++        }
++        ++index;
++    }
++}
++
+ HleAction CafeCoreinit::wait_event(CPUContext& cpu) {
+     const uint32_t address = cpu.gpr[3];
+     auto& state = event(address, cpu.pc);
+@@ -841,6 +881,61 @@ HleAction CafeCoreinit::wait_event(CPUContext& cpu) {
+     return HleAction::reschedule;
+ }
+ 
++// LOCAL: OSWaitEventWithTimeout(OSEvent*, OSTime timeout r4:r5) -> BOOL (1 signalled, 0 timed out).
++// Re-executed on wake: a stored deadline tells the first entry apart from a wake-up.
++HleAction CafeCoreinit::wait_event_timed(CPUContext& cpu) {
++    const uint32_t address = cpu.gpr[3];
++    auto& state = event(address, cpu.pc);
++    if (machine_ == nullptr) {
++        fault("event requires Cafe scheduler", address, abi::kOsEventSize, cpu.pc);
++    }
++    validate_range(address, abi::kOsEventSize, cpu.pc, MemoryAccess::write);
++    const uint32_t mode = abi::read_u32(memory_, address, abi::kEventModeOffset, cpu.pc);
++    const uint32_t current = machine_->current_thread_address();
++    const uint64_t timeout = static_cast<uint64_t>(cpu.gpr[4]) << 32 | cpu.gpr[5];
++    const auto granted = std::find(state.granted.begin(), state.granted.end(), current);
++    if (granted != state.granted.end()) {
++        state.granted.erase(granted);
++        timed_event_waits_.erase(current);
++        cpu.gpr[3] = 1;
++        return HleAction::return_to_lr;
++    }
++    if (abi::read_u32(memory_, address, abi::kEventValueOffset, cpu.pc) != 0) {
++        if (mode == 1) {
++            abi::write_u32(memory_, address, abi::kEventValueOffset, 0, cpu.pc);
++        }
++        timed_event_waits_.erase(current);
++        cpu.gpr[3] = 1;
++        return HleAction::return_to_lr;
++    }
++    const uint64_t now = machine_->current_time_ticks();
++    const auto pending = timed_event_waits_.find(current);
++    if (pending != timed_event_waits_.end() && now >= pending->second) {
++        timed_event_waits_.erase(pending);
++        state.waiters.erase(std::remove_if(state.waiters.begin(), state.waiters.end(),
++                                           [current](const MutexWaiter& w) { return w.thread == current; }),
++                            state.waiters.end());
++        mirror_thread_queue(address, abi::kEventQueueOffset, state.waiters, cpu.pc);
++        cpu.gpr[3] = 0;
++        return HleAction::return_to_lr;
++    }
++    if (timeout == 0 && pending == timed_event_waits_.end()) {
++        cpu.gpr[3] = 0;
++        return HleAction::return_to_lr;
++    }
++    if (pending == timed_event_waits_.end()) {
++        timed_event_waits_[current] =
++            timeout > UINT64_MAX - now ? UINT64_MAX : now + timeout;
++    }
++    if (std::none_of(state.waiters.begin(), state.waiters.end(),
++                     [current](const MutexWaiter& w) { return w.thread == current; })) {
++        state.waiters.push_back({current, machine_->current_thread_priority(), wait_sequence_++});
++        mirror_thread_queue(address, abi::kEventQueueOffset, state.waiters, cpu.pc);
++    }
++    machine_->block_current_timed(address, timed_event_waits_[current] - now);
++    return HleAction::reschedule;
++}
++
+ HleAction CafeCoreinit::signal_event(CPUContext& cpu, bool all) {
+     const uint32_t address = cpu.gpr[3];
+     auto& state = event(address, cpu.pc);
+@@ -1067,12 +1162,43 @@ HleAction CafeCoreinit::receive_message(CPUContext& cpu) {
+     return HleAction::return_to_lr;
+ }
+ 
++
++// LOCAL: NWIIU_EXIT_TRACE=1 prints the guest call chain (return addresses via the r1 back chain).
++static void trace_guest_stack(const char* tag, CPUContext& cpu, GuestMemory& memory) {
++    if (std::getenv("NWIIU_EXIT_TRACE") == nullptr) return;
++    std::fprintf(stderr, "%s lr=0x%08x chain:", tag, cpu.lr);
++    try {
++        uint32_t sp = cpu.gpr[1];
++        for (int depth = 0; depth < 32 && sp != 0; ++depth) {
++            const uint32_t back = memory.read32(sp, 0);
++            if (back <= sp) break;
++            std::fprintf(stderr, " %08x", memory.read32(back + 4, 0));
++            sp = back;
++        }
++    } catch (...) {}
++    std::fputc(10, stderr);
++}
++
+ void CafeCoreinit::register_handlers(CafeRuntime& runtime) {
+     image_.imports.try_emplace(
+         kErreulaStub, ImportTarget{"erreula", "unrendered_stub"});
++    for (uint32_t i = 1; i <= 64; ++i) {  // LOCAL: pre-registered per-export stubs
++        image_.imports.try_emplace(
++            kErreulaStub + 4 * i, ImportTarget{"erreula", "unrendered_stub"});
++    }
+     runtime.register_handler(
+         "erreula", "unrendered_stub",
+-        [](CPUContext& cpu, GuestMemory&) {
++        [this](CPUContext& cpu, GuestMemory&) {
++            if (std::getenv("NWIIU_FS_TRACE") != nullptr) {  // LOCAL: name the called export
++                for (const auto& [addr, n] : erreula_stub_names_) {
++                    if (addr == cpu.pc) {
++                        static int shown = 0;
++                        if (shown++ < 12) std::fprintf(stderr, "ERREULA-LR 0x%08x ", cpu.lr);
++                        std::fprintf(stderr, "ERREULA-CALL %s", n.c_str());
++                        std::fputc(10, stderr);
++                    }
++                }
++            }
+             cpu.gpr[3] = 0;
+             return HleAction::return_to_lr;
+         });
+@@ -1133,6 +1259,7 @@ void CafeCoreinit::register_handlers(CafeRuntime& runtime) {
+         [this](CPUContext& cpu, GuestMemory&) {
+             cpu.gpr[3] = allocate_expanded(abi::kMem2Heap, cpu.gpr[3], 8,
+                                            cpu.pc);
++            if (cpu.gpr[3] == 0) { std::fprintf(stderr, "ALLOC-FAIL DefaultHeap %s", ""); std::fputc(10, stderr); }
+             return HleAction::return_to_lr;
+         });
+     runtime.register_handler(
+@@ -1141,6 +1268,7 @@ void CafeCoreinit::register_handlers(CafeRuntime& runtime) {
+             cpu.gpr[3] = allocate_expanded(
+                 abi::kMem2Heap, cpu.gpr[3], static_cast<int32_t>(cpu.gpr[4]),
+                 cpu.pc);
++            if (cpu.gpr[3] == 0) { std::fprintf(stderr, "ALLOC-FAIL DefaultHeapEx %s", ""); std::fputc(10, stderr); }
+             return HleAction::return_to_lr;
+         });
+     runtime.register_handler(
+@@ -1158,7 +1286,8 @@ void CafeCoreinit::register_handlers(CafeRuntime& runtime) {
+         });
+     runtime.register_handler(
+         "coreinit", "MEMDestroyExpHeap",
+-        [this](CPUContext& cpu, GuestMemory&) {
++        [this](CPUContext& cpu, GuestMemory& mem) {
++            trace_guest_stack("MEMDestroyExpHeap", cpu, mem);
+             cpu.gpr[3] = destroy_expanded_heap(cpu.gpr[3], cpu.pc);
+             return HleAction::return_to_lr;
+         });
+@@ -1168,6 +1297,7 @@ void CafeCoreinit::register_handlers(CafeRuntime& runtime) {
+             cpu.gpr[3] = allocate_expanded(
+                 cpu.gpr[3], cpu.gpr[4], static_cast<int32_t>(cpu.gpr[5]),
+                 cpu.pc);
++            if (cpu.gpr[3] == 0) { std::fprintf(stderr, "ALLOC-FAIL ExpHeapEx %s", ""); std::fputc(10, stderr); }
+             return HleAction::return_to_lr;
+         });
+     runtime.register_handler(
+@@ -1187,7 +1317,8 @@ void CafeCoreinit::register_handlers(CafeRuntime& runtime) {
+         });
+     runtime.register_handler(
+         "coreinit", "MEMDestroyFrmHeap",
+-        [this](CPUContext& cpu, GuestMemory&) {
++        [this](CPUContext& cpu, GuestMemory& mem) {
++            trace_guest_stack("MEMDestroyFrmHeap", cpu, mem);
+             cpu.gpr[3] = destroy_frame_heap(cpu.gpr[3], cpu.pc);
+             return HleAction::return_to_lr;
+         });
+@@ -1197,6 +1328,7 @@ void CafeCoreinit::register_handlers(CafeRuntime& runtime) {
+             cpu.gpr[3] = allocate_frame(cpu.gpr[3], cpu.gpr[4],
+                                         static_cast<int32_t>(cpu.gpr[5]),
+                                         cpu.pc);
++            if (cpu.gpr[3] == 0) { std::fprintf(stderr, "ALLOC-FAIL FrmHeapEx %s", ""); std::fputc(10, stderr); }
+             return HleAction::return_to_lr;
+         });
+     runtime.register_handler(
+@@ -1353,9 +1485,16 @@ void CafeCoreinit::register_handlers(CafeRuntime& runtime) {
+                 const uint32_t output = memory.read32(setting + 0x50, cpu.pc);
+                 if ((!is_language || type != 3 || size < 4) &&
+                     (!is_parental || type != 1 || size < 1)) {
+-                    throw GuestFault("unsupported UCReadSysConfig setting",
+-                                     setting, setting_size, cpu.pc,
+-                                     MemoryAccess::read);
++                    // LOCAL SCAFFOLDING (SM3DW): unknown key -> log it and return zeros.
++                    std::string key;
++                    for (uint32_t ch = 0; ch < 0x40; ++ch) {
++                        const char c = static_cast<char>(memory.read8(setting + ch, cpu.pc));
++                        if (c == 0) break;
++                        key.push_back(c);
++                    }
++                    std::fprintf(stderr, "SYSCONFIG-STUB key=%s type=%u size=%u\n", key.c_str(), type, size);
++                    memory.validate_range(output, size, cpu.pc, MemoryAccess::write);
++                    continue;
+                 }
+                 memory.validate_range(output, is_language ? 4 : 1, cpu.pc,
+                                       MemoryAccess::write);
+@@ -1367,10 +1506,15 @@ void CafeCoreinit::register_handlers(CafeRuntime& runtime) {
+                 const uint32_t output =
+                     memory.read32(setting + 0x50, cpu.pc);
+                 memory.write32(setting + 0x48, 0, cpu.pc);
+-                if (is_language) {
++                const uint32_t stype = memory.read32(setting + 0x44, cpu.pc);
++                const uint32_t ssize = memory.read32(setting + 0x4C, cpu.pc);
++                const bool is_parental2 = matches(setting, parental_prefix, sizeof(parental_prefix) - 1);
++                if (is_language && stype == 3 && ssize >= 4) {
+                     memory.write32(output, 1, cpu.pc);
+-                } else {
++                } else if (is_parental2 && stype == 1 && ssize >= 1) {
+                     memory.write8(output, 0, cpu.pc);
++                } else {
++                    for (uint32_t b = 0; b < ssize; ++b) memory.write8(output + b, 0, cpu.pc);
+                 }
+             }
+             cpu.gpr[3] = 0;
+@@ -1454,7 +1598,7 @@ void CafeCoreinit::register_handlers(CafeRuntime& runtime) {
+         });
+     runtime.register_handler(
+         "coreinit", "OSDynLoad_FindExport",
+-        [](CPUContext& cpu, GuestMemory& memory) {
++        [this, &runtime](CPUContext& cpu, GuestMemory& memory) {
+             constexpr uint32_t invalid_argument = 0xBAD1000F;
+             constexpr uint32_t export_not_found = 0xBAD10028;
+             if (cpu.gpr[6] == 0) {
+@@ -1470,7 +1614,26 @@ void CafeCoreinit::register_handlers(CafeRuntime& runtime) {
+                 cpu.gpr[3] = export_not_found;
+                 return HleAction::return_to_lr;
+             }
+-            memory.write32(cpu.gpr[6], kErreulaStub, cpu.pc);
++            {  // LOCAL: one distinct stub per export so traces name the function.
++                std::string name;
++                for (uint32_t a = cpu.gpr[5]; name.size() < 80; ++a) {
++                    const char c = static_cast<char>(memory.read8(a, cpu.pc));
++                    if (c == 0) break;
++                    name.push_back(c);
++                }
++                uint32_t stub = 0;
++                for (const auto& [addr, n] : erreula_stub_names_) {
++                    if (n == name) stub = addr;
++                }
++                if (stub == 0) {
++                    stub = kErreulaStub + 4 * static_cast<uint32_t>(erreula_stub_names_.size() + 1);
++                    erreula_stub_names_.emplace_back(stub, name);
++                }
++                memory.write32(cpu.gpr[6], stub, cpu.pc);
++                cpu.gpr[3] = 0;
++                return HleAction::return_to_lr;
++            }
++memory.write32(cpu.gpr[6], kErreulaStub, cpu.pc);
+             cpu.gpr[3] = 0;
+             return HleAction::return_to_lr;
+         });
+@@ -1647,6 +1810,29 @@ void CafeCoreinit::register_handlers(CafeRuntime& runtime) {
+             cpu.gpr[3] = 1;
+             return HleAction::return_to_lr;
+         });
++    // LOCAL (SM3DW): OSJoinThread(thread, int* exitValue) -> BOOL. Returns the exit value once the
++    // target is moribund; otherwise blocks on the target's address (woken by Machine::exit_current)
++    // and is re-executed on wake, like OSWaitEvent. Detached-thread and self-join cases are not handled.
++    runtime.register_handler(
++        "coreinit", "OSJoinThread",
++        [this](CPUContext& cpu, GuestMemory&) {
++            const uint32_t target = cpu.gpr[3];
++            if (machine_ == nullptr || !machine_->has_thread(target)) {
++                cpu.gpr[3] = 0;
++                return HleAction::return_to_lr;
++            }
++            if (abi::read_u8(memory_, target, abi::kOsThreadStateOffset, cpu.pc) == abi::kThreadMoribund) {
++                if (cpu.gpr[4] != 0) {
++                    memory_.write32(cpu.gpr[4],
++                                    abi::read_u32(memory_, target, abi::kOsThreadExitValueOffset, cpu.pc),
++                                    cpu.pc);
++                }
++                cpu.gpr[3] = 1;
++                return HleAction::return_to_lr;
++            }
++            machine_->block_current(target);
++            return HleAction::reschedule;
++        });
+     runtime.register_handler(
+         "coreinit", "OSExitThread",
+         [this](CPUContext& cpu, GuestMemory&) {
+@@ -1654,6 +1840,10 @@ void CafeCoreinit::register_handlers(CafeRuntime& runtime) {
+                 fault("thread exit requires Cafe scheduler", cpu.pc, 4,
+                       cpu.pc);
+             }
++            if (std::getenv("NWIIU_EXIT_TRACE") != nullptr) {  // LOCAL
++                std::fprintf(stderr, "OSEXITTHREAD-CALL lr=0x%08x r3=0x%08x r1=0x%08x", cpu.lr, cpu.gpr[3], cpu.gpr[1]);
++                std::fputc(10, stderr);
++            }
+             if (!machine_->return_from_callback()) {
+                 machine_->exit_current(static_cast<int32_t>(cpu.gpr[3]));
+             }
+@@ -1726,9 +1916,60 @@ void CafeCoreinit::register_handlers(CafeRuntime& runtime) {
+             abi::write_u32(memory_, alarm, abi::kAlarmStateOffset, 1, cpu.pc);
+             abi::write_u32(memory_, alarm, abi::kAlarmContextOffset, 0,
+                            cpu.pc);
++            if (std::find(armed_alarms_.begin(), armed_alarms_.end(), alarm) ==
++                armed_alarms_.end()) {
++                armed_alarms_.push_back(alarm);
++            }
++            cpu.gpr[3] = 1;
++            return HleAction::return_to_lr;
++        });
++    // LOCAL: OSSetAlarm(OSAlarm*, OSTime relativeTime (r4:r5), callback (r6)) -> BOOL.
++    runtime.register_handler(
++        "coreinit", "OSSetAlarm",
++        [this](CPUContext& cpu, GuestMemory&) {
++            const uint32_t alarm = cpu.gpr[3];
++            validate_range(alarm, abi::kOsAlarmSize, cpu.pc, MemoryAccess::read);
++            validate_range(alarm, abi::kOsAlarmSize, cpu.pc, MemoryAccess::write);
++            if (abi::read_u32(memory_, alarm, abi::kAlarmTagOffset, cpu.pc) !=
++                abi::kOsAlarmTag) {
++                fault("invalid alarm", alarm, abi::kOsAlarmSize, cpu.pc,
++                      MemoryAccess::read);
++            }
++            const uint64_t delay =
++                static_cast<uint64_t>(cpu.gpr[4]) << 32 | cpu.gpr[5];
++            const uint64_t now =
++                machine_ == nullptr ? ticks_ : machine_->current_time_ticks();
++            abi::write_u32(memory_, alarm, abi::kAlarmCallbackOffset, cpu.gpr[6], cpu.pc);
++            abi::write_u64(memory_, alarm, abi::kAlarmNextFireOffset, now + delay, cpu.pc);
++            abi::write_u64(memory_, alarm, abi::kAlarmPeriodOffset, 0, cpu.pc);
++            abi::write_u32(memory_, alarm, abi::kAlarmStateOffset, 1, cpu.pc);
++            if (std::find(armed_alarms_.begin(), armed_alarms_.end(), alarm) ==
++                armed_alarms_.end()) {
++                armed_alarms_.push_back(alarm);
++            }
+             cpu.gpr[3] = 1;
+             return HleAction::return_to_lr;
+         });
++    // LOCAL: OSCancelAlarm(OSAlarm*) disarms; OSGetAlarmUserData(OSAlarm*) returns the stored value.
++    runtime.register_handler(
++        "coreinit", "OSCancelAlarm",
++        [this](CPUContext& cpu, GuestMemory&) {
++            const uint32_t alarm = cpu.gpr[3];
++            validate_range(alarm, abi::kOsAlarmSize, cpu.pc, MemoryAccess::write);
++            abi::write_u32(memory_, alarm, abi::kAlarmStateOffset, 0, cpu.pc);
++            armed_alarms_.erase(
++                std::remove(armed_alarms_.begin(), armed_alarms_.end(), alarm),
++                armed_alarms_.end());
++            return HleAction::return_to_lr;
++        });
++    runtime.register_handler(
++        "coreinit", "OSGetAlarmUserData",
++        [this](CPUContext& cpu, GuestMemory&) {
++            const uint32_t alarm = cpu.gpr[3];
++            validate_range(alarm, abi::kOsAlarmSize, cpu.pc, MemoryAccess::read);
++            cpu.gpr[3] = abi::read_u32(memory_, alarm, abi::kAlarmUserDataOffset, cpu.pc);
++            return HleAction::return_to_lr;
++        });
+     runtime.register_handler(
+         "coreinit", "OSYieldThread",
+         [this](CPUContext& cpu, GuestMemory&) {
+@@ -1791,6 +2032,213 @@ void CafeCoreinit::register_handlers(CafeRuntime& runtime) {
+             cpu.gpr[3] = machine_->current_thread_address();
+             return HleAction::return_to_lr;
+         });
++    // LOCAL (SM3DW): MCP (system config proxy). MCP_Open returns a handle; MCP_GetSysProdSettings
++    // reports product area = Europe (4, from this disc's meta.xml region field). The struct is
++    // zero-filled over its first 8 bytes only, then product_area written to word 0 and word 1:
++    // the exact field layout is from memory, not verified. Selects the Eu* locale folders.
++    runtime.register_handler(
++        "coreinit", "MCP_Open",
++        [](CPUContext& cpu, GuestMemory&) {
++            cpu.gpr[3] = 1;
++            return HleAction::return_to_lr;
++        });
++    runtime.register_handler(
++        "coreinit", "MCP_GetSysProdSettings",
++        [](CPUContext& cpu, GuestMemory& memory) {
++            const uint32_t out = cpu.gpr[4];
++            memory.write32(out + 0, 4, cpu.pc);
++            memory.write32(out + 4, 4, cpu.pc);
++            cpu.gpr[3] = 0;
++            return HleAction::return_to_lr;
++        });
++    // SCAFFOLDING (local, SM3DW bring-up): coreinit:MCP_Close -> r3=0
++    runtime.register_handler(
++        "coreinit", "MCP_Close",
++        [](CPUContext& cpu, GuestMemory&) {
++            cpu.gpr[3] = 0;
++            return HleAction::return_to_lr;
++        });
++    // LOCAL (SM3DW bring-up): SAVEGetSharedDataTitlePath(u64 titleId, const char* dir, char* out, u32 size).
++    // Writes "/vol/storage_mlc01/sys/title/<hi>/<lo>/<dir>" and returns 0. The files under that
++    // path are console system data (e.g. FFLRes*.dat) and are NOT provided here.
++    runtime.register_handler(
++        "nn_save", "SAVEGetSharedDataTitlePath",
++        [](CPUContext& cpu, GuestMemory& memory) {
++            const uint32_t title_hi = cpu.gpr[3], title_lo = cpu.gpr[4];
++            const uint32_t dir = cpu.gpr[5], out = cpu.gpr[6], size = cpu.gpr[7];
++            char head[96];
++            std::snprintf(head, sizeof(head),
++                          "/vol/storage_mlc01/sys/title/%08x/%08x/", title_hi, title_lo);
++            std::string path = head;
++            for (uint32_t i = 0; i < 64; ++i) {
++                const uint8_t c = memory.read8(dir + i, cpu.pc);
++                if (c == 0) break;
++                path.push_back(static_cast<char>(c));
++            }
++            if (path.size() + 1 > size) {
++                cpu.gpr[3] = 0xFFFFFFFFu;
++                return HleAction::return_to_lr;
++            }
++            for (size_t i = 0; i < path.size(); ++i)
++                memory.write8(out + static_cast<uint32_t>(i), static_cast<uint8_t>(path[i]), cpu.pc);
++            memory.write8(out + static_cast<uint32_t>(path.size()), 0, cpu.pc);
++            cpu.gpr[3] = 0;
++            return HleAction::return_to_lr;
++        });
++    // LOCAL (SM3DW): zlib125 backed by the host zlib. Guest z_stream (32-bit, big-endian) offsets:
++    // next_in 0, avail_in 4, total_in 8, next_out 12, avail_out 16, total_out 20, msg 24, state 28.
++    // Only the stream fields the game's inflate use needs are mirrored; zalloc/zfree/opaque are ignored.
++    {
++        auto streams = std::make_shared<std::map<uint32_t, z_stream>>();
++        auto read_bytes = [](GuestMemory& mem, uint32_t addr, uint32_t n, uint32_t pc) {
++            std::vector<unsigned char> v(n);
++            for (uint32_t i = 0; i < n; ++i) v[i] = mem.read8(addr + i, pc);
++            return v;
++        };
++        auto write_bytes = [](GuestMemory& mem, uint32_t addr, const unsigned char* d, uint32_t n, uint32_t pc) {
++            for (uint32_t i = 0; i < n; ++i) mem.write8(addr + i, d[i], pc);
++        };
++        runtime.register_handler(
++            "zlib125", "inflateInit2_",
++            [streams](CPUContext& cpu, GuestMemory& memory) {
++                const uint32_t strm = cpu.gpr[3];
++                z_stream z{};
++                const int rc = ::inflateInit2_(&z, static_cast<int>(cpu.gpr[4]), ZLIB_VERSION,
++                                               static_cast<int>(sizeof(z_stream)));
++                if (rc == Z_OK) {
++                    (*streams)[strm] = z;
++                    memory.write32(strm + 8, 0, cpu.pc);   // total_in
++                    memory.write32(strm + 20, 0, cpu.pc);  // total_out
++                    memory.write32(strm + 24, 0, cpu.pc);  // msg
++                }
++                cpu.gpr[3] = static_cast<uint32_t>(rc);
++                return HleAction::return_to_lr;
++            });
++        runtime.register_handler(
++            "zlib125", "inflate",
++            [streams, read_bytes, write_bytes](CPUContext& cpu, GuestMemory& memory) {
++                const uint32_t strm = cpu.gpr[3];
++                const auto it = streams->find(strm);
++                if (it == streams->end()) {
++                    cpu.gpr[3] = static_cast<uint32_t>(Z_STREAM_ERROR);
++                    return HleAction::return_to_lr;
++                }
++                const uint32_t pc = cpu.pc;
++                const uint32_t next_in = memory.read32(strm + 0, pc);
++                const uint32_t avail_in = memory.read32(strm + 4, pc);
++                const uint32_t next_out = memory.read32(strm + 12, pc);
++                const uint32_t avail_out = memory.read32(strm + 16, pc);
++                auto in = read_bytes(memory, next_in, avail_in, pc);
++                std::vector<unsigned char> out(avail_out);
++                z_stream& z = it->second;
++                z.next_in = in.data();
++                z.avail_in = avail_in;
++                z.next_out = out.data();
++                z.avail_out = avail_out;
++                const int rc = ::inflate(&z, static_cast<int>(cpu.gpr[4]));
++                const uint32_t consumed = avail_in - z.avail_in;
++                const uint32_t produced = avail_out - z.avail_out;
++                write_bytes(memory, next_out, out.data(), produced, pc);
++                memory.write32(strm + 0, next_in + consumed, pc);
++                memory.write32(strm + 4, avail_in - consumed, pc);
++                memory.write32(strm + 8, memory.read32(strm + 8, pc) + consumed, pc);
++                memory.write32(strm + 12, next_out + produced, pc);
++                memory.write32(strm + 16, avail_out - produced, pc);
++                memory.write32(strm + 20, memory.read32(strm + 20, pc) + produced, pc);
++                z.next_in = nullptr;
++                z.next_out = nullptr;
++                cpu.gpr[3] = static_cast<uint32_t>(rc);
++                return HleAction::return_to_lr;
++            });
++        runtime.register_handler(
++            "zlib125", "inflateEnd",
++            [streams](CPUContext& cpu, GuestMemory&) {
++                const auto it = streams->find(cpu.gpr[3]);
++                if (it == streams->end()) {
++                    cpu.gpr[3] = static_cast<uint32_t>(Z_STREAM_ERROR);
++                } else {
++                    cpu.gpr[3] = static_cast<uint32_t>(::inflateEnd(&it->second));
++                    streams->erase(it);
++                }
++                return HleAction::return_to_lr;
++            });
++        // compress(dest, uLongf* destLen, source, sourceLen) / uncompress(...): r3..r6.
++        for (const bool pack : {true, false}) {
++            runtime.register_handler(
++                "zlib125", pack ? "compress" : "uncompress",
++                [pack, read_bytes, write_bytes](CPUContext& cpu, GuestMemory& memory) {
++                    const uint32_t pc = cpu.pc;
++                    const uint32_t dest = cpu.gpr[3];
++                    const uint32_t dest_len_ptr = cpu.gpr[4];
++                    const uint32_t src = cpu.gpr[5];
++                    const uint32_t src_len = cpu.gpr[6];
++                    const auto in = read_bytes(memory, src, src_len, pc);
++                    uLongf out_len = memory.read32(dest_len_ptr, pc);
++                    std::vector<unsigned char> out(out_len);
++                    const int rc = pack ? ::compress(out.data(), &out_len, in.data(), src_len)
++                                        : ::uncompress(out.data(), &out_len, in.data(), src_len);
++                    if (rc == Z_OK) {
++                        write_bytes(memory, dest, out.data(), static_cast<uint32_t>(out_len), pc);
++                    }
++                    memory.write32(dest_len_ptr, static_cast<uint32_t>(out_len), pc);
++                    cpu.gpr[3] = static_cast<uint32_t>(rc);
++                    return HleAction::return_to_lr;
++                });
++        }
++    }
++    // LOCAL (SM3DW): OSTicksToCalendarTime(OSTime ticks, OSCalendarTime* out).
++    // OSTime counts bus-clock/4 ticks (62,156,250 Hz) from 2000-01-01 00:00:00 UTC. OSCalendarTime is
++    // ten big-endian int32: sec, min, hour, mday, mon(0-11), year, wday(0=Sun), yday, msec, usec.
++    runtime.register_handler(
++        "coreinit", "OSTicksToCalendarTime",
++        [](CPUContext& cpu, GuestMemory& memory) {
++            constexpr int64_t kHz = 248625000 / 4;
++            const int64_t ticks = static_cast<int64_t>(
++                (static_cast<uint64_t>(cpu.gpr[3]) << 32) | cpu.gpr[4]);
++            auto floordiv = [](int64_t a, int64_t b) {
++                int64_t q = a / b;
++                if ((a % b != 0) && ((a < 0) != (b < 0))) --q;
++                return q;
++            };
++            const int64_t secs = floordiv(ticks, kHz);
++            const int64_t rem = ticks - secs * kHz;           // 0 <= rem < kHz
++            const int64_t days = floordiv(secs, 86400);        // days since 2000-01-01
++            const int64_t sod = secs - days * 86400;
++            // Howard Hinnant's civil_from_days, shifted from 1970 to 2000 (10957 days).
++            const int64_t z = days + 10957 + 719468;
++            const int64_t era = floordiv(z, 146097);
++            const int64_t doe = z - era * 146097;
++            const int64_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
++            int64_t year = yoe + era * 400;
++            const int64_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
++            const int64_t mp = (5 * doy + 2) / 153;
++            const int64_t mday = doy - (153 * mp + 2) / 5 + 1;
++            const int64_t month = mp < 10 ? mp + 3 : mp - 9;   // 1..12
++            if (month <= 2) ++year;
++            const bool leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
++            static constexpr int cum[12] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334};
++            const int64_t yday = cum[month - 1] + (mday - 1) + ((leap && month > 2) ? 1 : 0);
++            const int64_t wday = ((days % 7) + 7 + 6) % 7;     // 2000-01-01 was a Saturday (6)
++            const int64_t usec_total = rem * 1000000 / kHz;
++            const uint32_t out = cpu.gpr[5];
++            const int32_t f[10] = {
++                static_cast<int32_t>(sod % 60),       static_cast<int32_t>((sod / 60) % 60),
++                static_cast<int32_t>(sod / 3600),     static_cast<int32_t>(mday),
++                static_cast<int32_t>(month - 1),      static_cast<int32_t>(year),
++                static_cast<int32_t>(wday),           static_cast<int32_t>(yday),
++                static_cast<int32_t>(usec_total / 1000), static_cast<int32_t>(usec_total % 1000)};
++            for (uint32_t i = 0; i < 10; ++i)
++                memory.write32(out + i * 4, static_cast<uint32_t>(f[i]), cpu.pc);
++            return HleAction::return_to_lr;
++        });
++    // LOCAL (SM3DW): the game probes other applications' save data at startup. There is none here,
++    // so answer FS_STATUS_NOT_FOUND (-6) like a console without that software would.
++    for (const char* name : {"SAVEGetStatOtherApplication", "SAVEOpenFileOtherApplication"}) {
++        runtime.register_handler("nn_save", name, [](CPUContext& cpu, GuestMemory&) {
++            cpu.gpr[3] = 0xFFFFFFFAu;
++            return HleAction::return_to_lr;
++        });
++    }
+     runtime.register_handler(
+         "coreinit", "OSGetSystemInfo",
+         [](CPUContext& cpu, GuestMemory&) {
+@@ -1824,9 +2272,19 @@ void CafeCoreinit::register_handlers(CafeRuntime& runtime) {
+             if (machine_ == nullptr || cpu.gpr[3] >= 16) {
+                 fault("invalid thread-specific id", cpu.gpr[3], 4, cpu.pc);
+             }
+-            cpu.gpr[3] = abi::read_u32(
+-                memory_, machine_->current_thread_address(),
+-                abi::kOsThreadSpecificOffset + cpu.gpr[3] * 4, cpu.pc);
++            {
++                const uint32_t id = cpu.gpr[3];
++                cpu.gpr[3] = abi::read_u32(
++                    memory_, machine_->current_thread_address(),
++                    abi::kOsThreadSpecificOffset + id * 4, cpu.pc);
++                static std::set<uint64_t> seen;
++                if (cpu.gpr[3] == 0 &&
++                    seen.insert((uint64_t{machine_->current_thread_address()} << 8) | id).second) {
++                    std::fprintf(stderr, "TLS-NULL-READ thread=0x%08x id=%u pc=0x%08x lr=0x%08x",
++                                 machine_->current_thread_address(), id, cpu.pc, cpu.lr);
++                    std::fputc(10, stderr);
++                }
++            }
+             return HleAction::return_to_lr;
+         });
+     runtime.register_handler(
+@@ -1916,6 +2374,9 @@ void CafeCoreinit::register_handlers(CafeRuntime& runtime) {
+             if (machine_ == nullptr || cpu.gpr[3] >= 16) {
+                 fault("invalid thread-specific id", cpu.gpr[3], 4, cpu.pc);
+             }
++            std::fprintf(stderr, "TLS-SET thread=0x%08x id=%u value=0x%08x lr=0x%08x",
++                         machine_->current_thread_address(), cpu.gpr[3], cpu.gpr[4], cpu.lr);
++            std::fputc(10, stderr);
+             abi::write_u32(
+                 memory_, machine_->current_thread_address(),
+                 abi::kOsThreadSpecificOffset + cpu.gpr[3] * 4, cpu.gpr[4],
+@@ -1965,6 +2426,11 @@ void CafeCoreinit::register_handlers(CafeRuntime& runtime) {
+         [this](CPUContext& cpu, GuestMemory&) {
+             return wait_event(cpu);
+         });
++    runtime.register_handler(
++        "coreinit", "OSWaitEventWithTimeout",
++        [this](CPUContext& cpu, GuestMemory&) {
++            return wait_event_timed(cpu);
++        });
+     runtime.register_handler(
+         "coreinit", "OSInitMutex",
+         [this](CPUContext& cpu, GuestMemory&) {
+diff --git a/nWiiURuntime/src/cafe_filesystem.cpp b/nWiiURuntime/src/cafe_filesystem.cpp
+index 8c86624..894869e 100644
+--- a/nWiiURuntime/src/cafe_filesystem.cpp
++++ b/nWiiURuntime/src/cafe_filesystem.cpp
+@@ -843,7 +843,15 @@ void CafeFilesystem::register_handlers(CafeRuntime& runtime) {
+                                                 : error->second;
+          });
+     bind("coreinit", "FSGetVolumeState", [this](CPUContext& cpu) {
+-        return fs_initialized_ && clients_.contains(cpu.gpr[3]) ? 1 : 11;
++        if (std::getenv("NWIIU_FS_TRACE") != nullptr) {  // LOCAL
++            static int n = 0;
++            if (n++ < 2) {
++                std::fprintf(stderr, "VOLSTATE-CALLER lr=0x%08x", cpu.lr);
++                std::fputc(10, stderr);
++            }
++        }
++        // LOCAL: report READY whenever FS is initialised (game polls with its own client)
++        return fs_initialized_ ? 1 : 11;
+     });
+     bind("coreinit", "FSGetStat", [this](CPUContext& cpu) {
+         const auto client = cpu.gpr[3];
+@@ -1171,8 +1179,14 @@ void CafeFilesystem::register_handlers(CafeRuntime& runtime) {
+         if (!path || !mode) {
+             return finish(client, kErrorInvalidPath, mask);
+         }
+-        return open_file(client, cpu.gpr[4], *path, *mode, cpu.gpr[8], mask,
+-                         true, static_cast<uint8_t>(cpu.gpr[5]), cpu.pc);
++        const auto result = open_file(client, cpu.gpr[4], *path, *mode, cpu.gpr[8], mask,
++                                      true, static_cast<uint8_t>(cpu.gpr[5]), cpu.pc);
++        if (std::getenv("NWIIU_FS_TRACE") != nullptr) {  // LOCAL
++            std::fprintf(stderr, "SAVEOPEN result=%d slot=%u path=%s mode=%s", static_cast<int>(result),
++                         cpu.gpr[5], path->c_str(), mode->c_str());
++            std::fputc(10, stderr);
++        }
++        return result;
+     });
+     bind("nn_save", "SAVEOpenDir", [this](CPUContext& cpu) {
+         const auto client = cpu.gpr[3];
+diff --git a/nWiiURuntime/src/cafe_proc_ui.cpp b/nWiiURuntime/src/cafe_proc_ui.cpp
+index 760b52f..6422bcc 100644
+--- a/nWiiURuntime/src/cafe_proc_ui.cpp
++++ b/nWiiURuntime/src/cafe_proc_ui.cpp
+@@ -4,6 +4,8 @@
+ #include "runtime/execution_image.h"
+ 
+ #include <algorithm>
++#include <cstdio>
++#include <cstdlib>
+ 
+ namespace nwii::runtime {
+ CafeProcUi::CafeProcUi(ExecutionImage& image) : memory_(image.memory) {}
+@@ -20,9 +22,55 @@ void CafeProcUi::register_handlers(CafeRuntime& runtime) {
+             state_ = {true, callback};
+             return HleAction::return_to_lr;
+         });
++    // LOCAL (SM3DW): ProcUIInitEx(saveCallback, userData). Same validation/storage as ProcUIInit;
++    // the user-data argument (r4) is not stored. Callbacks are never invoked on the reached path.
++    runtime.register_handler(
++        "proc_ui", "ProcUIInitEx", [this](CPUContext& cpu, GuestMemory&) {
++            const uint32_t callback = cpu.gpr[3];
++            if (callback == 0 || callback % 4 != 0) {
++                throw GuestFault("invalid ProcUI save callback", callback, 4,
++                                 cpu.pc, MemoryAccess::execute);
++            }
++            memory_.validate(callback, 4, cpu.pc, MemoryAccess::execute);
++            state_ = {true, callback};
++            return HleAction::return_to_lr;
++        });
++    runtime.register_handler(
++        "proc_ui", "ProcUIClearCallbacks", [this](CPUContext&, GuestMemory&) {
++            for (auto& slot : state_.callbacks) {
++                slot.clear();
++            }
++            return HleAction::return_to_lr;
++        });
++    // No-ops (no foreground/background switching exists in this runtime yet).
++    for (const char* name : {"ProcUIDrawDoneRelease", "ProcUIShutdown"}) {
++        runtime.register_handler("proc_ui", name,
++                                 [](CPUContext&, GuestMemory&) {
++                                     return HleAction::return_to_lr;
++                                 });
++    }
+     runtime.register_handler(
+         "proc_ui", "ProcUIProcessMessages",
+-        [](CPUContext& cpu, GuestMemory&) {
++        [](CPUContext& cpu, GuestMemory& mem) {
++            static int stack_shown = 0;
++            if (std::getenv("NWIIU_EXIT_TRACE") != nullptr && stack_shown++ < 1) {  // LOCAL
++                std::fprintf(stderr, "PROCUI-CHAIN lr=0x%08x chain:", cpu.lr);
++                try {
++                    uint32_t sp = cpu.gpr[1];
++                    for (int depth = 0; depth < 32 && sp != 0; ++depth) {
++                        const uint32_t back = mem.read32(sp, 0);
++                        if (back <= sp) break;
++                        std::fprintf(stderr, " %08x", mem.read32(back + 4, 0));
++                        sp = back;
++                    }
++                } catch (...) {}
++                std::fputc(10, stderr);
++            }
++            static int n = 0;
++            if (std::getenv("NWIIU_FS_TRACE") != nullptr && n++ < 3) {  // LOCAL
++                std::fprintf(stderr, "PROCUI-CALLER lr=0x%08x", cpu.lr);
++                std::fputc(10, stderr);
++            }
+             cpu.gpr[3] = 0;
+             return HleAction::return_to_lr;
+         });
+diff --git a/nWiiURuntime/src/cafe_runtime.cpp b/nWiiURuntime/src/cafe_runtime.cpp
+index 4730fa1..7223d86 100644
+--- a/nWiiURuntime/src/cafe_runtime.cpp
++++ b/nWiiURuntime/src/cafe_runtime.cpp
+@@ -385,6 +385,46 @@ CafeRuntime::CafeRuntime(ExecutionImage& image)
+                 return HleAction::return_to_lr;
+             });
+     }
++    // LOCAL (SM3DW): VPADInit and rumble. No GamePad hardware exists here; these are accepted
++    // and ignored. (Input mapping to host devices is future work.)
++    for (const char* name : {"VPADInit", "VPADControlMotor", "VPADStopMotor"}) {
++        register_handler("vpad", name, [](CPUContext&, GuestMemory&) {
++            return HleAction::return_to_lr;
++        });
++    }
++    // LOCAL (SM3DW): Idle-management (auto power-down) queries: report success and "disabled".
++    // IMIsAPDEnabledBySysSettings(BOOL* out) / IMIsAPDEnabled(BOOL* out) write FALSE to *out.
++    for (const char* name : {"IMIsAPDEnabledBySysSettings", "IMIsAPDEnabled"}) {
++        register_handler("coreinit", name, [](CPUContext& cpu, GuestMemory& memory) {
++            if (cpu.gpr[3] != 0) {
++                memory.write32(cpu.gpr[3], 0, cpu.pc);
++            }
++            cpu.gpr[3] = 0;
++            return HleAction::return_to_lr;
++        });
++    }
++    for (const char* name : {"IMEnableAPD", "IMDisableAPD"}) {
++        register_handler("coreinit", name, [](CPUContext& cpu, GuestMemory&) {
++            cpu.gpr[3] = 0;
++            return HleAction::return_to_lr;
++        });
++    }
++    // LOCAL (SM3DW): Wii Remote (WPAD/KPAD) with no remotes connected. r3 = return value.
++    {
++        const std::pair<const char*, uint32_t> wpad[] = {
++            {"WPADInit", 0}, {"WPADRegisterAllocator", 0}, {"KPADEnableDPD", 0},
++            {"KPADDisableDPD", 0}, {"WPADControlMotor", 0}, {"WPADControlSpeaker", 0},
++            {"WPADGetSpeakerVolume", 0}, {"WPADCanSendStreamData", 0},
++            {"WPADSendStreamData", 0}, {"WENCGetEncodeData", 0},
++            {"WPADProbe", 0xFFFFFFFFu}};  // -1: no controller on that channel
++        for (const auto& [name, value] : wpad) {
++            const uint32_t result = value;
++            register_handler("padscore", name, [result](CPUContext& cpu, GuestMemory&) {
++                cpu.gpr[3] = result;
++                return HleAction::return_to_lr;
++            });
++        }
++    }
+     register_handler(
+         "vpad", "VPADRead",
+         [this](CPUContext& cpu, GuestMemory& memory) {
+@@ -400,6 +440,16 @@ CafeRuntime::CafeRuntime(ExecutionImage& image)
+                         memory.write8(cpu.gpr[4] + offset, 0, cpu.pc);
+                     }
+                     if (cpu.gpr[3] == 0 && vpad_connected_) {
++                        {
++                            // LOCAL: NWIIU_INPUT_TRACE=1 logs each change of the button state handed to the game.
++                            static const bool trace = std::getenv("NWIIU_INPUT_TRACE") != nullptr;
++                            static uint32_t last_seen = 0xFFFFFFFFu;
++                            if (trace && vpad_buttons_ != last_seen) {
++                                std::fprintf(stderr, "VPAD-HOLD 0x%04x (count=%u) pc=0x%08x", vpad_buttons_, cpu.gpr[5], cpu.lr);
++                                std::fputc(10, stderr);
++                                last_seen = vpad_buttons_;
++                            }
++                        }
+                         memory.write32(cpu.gpr[4], vpad_buttons_, cpu.pc);
+                         memory.write32(cpu.gpr[4] + 4,
+                                        vpad_buttons_ & ~vpad_last_buttons_,
+@@ -715,6 +765,9 @@ void CafeRuntime::service_audio_frame() {
+     if (machine_ == nullptr) {
+         return;
+     }
++    if (std::getenv("NWIIU_NO_AUDIO_CB") != nullptr) {  // LOCAL experiment: no AX callbacks at all
++        return;
++    }
+     audio_sample_phase_ += 800;
+     while (audio_sample_phase_ >= kAxSamples) {
+         audio_sample_phase_ -= kAxSamples;
+@@ -729,8 +782,17 @@ void CafeRuntime::service_audio_frame() {
+ 
+ void CafeRuntime::register_handler(std::string module, std::string symbol,
+                                    HleHandler handler) {
++    // LOCAL (SM3DW): only GPU commands are recorded into a display list. Init*/Calc*/Get*/Is*/Temp*
++    // helpers run immediately on real GX2 (they fill CPU-side structs the caller reads right away);
++    // deferring them made replay read stale stack memory.
++    const auto starts_with = [&symbol](const char* prefix) {
++        return symbol.rfind(prefix, 0) == 0;
++    };
++    const bool immediate_gx2_helper =
++        starts_with("GX2Init") || starts_with("GX2Calc") || starts_with("GX2Get") ||
++        starts_with("GX2Is") || starts_with("GX2Temp");
+     const bool records_display_command =
+-        module == "gx2" && symbol != "GX2BeginDisplayListEx" &&
++        module == "gx2" && !immediate_gx2_helper && symbol != "GX2BeginDisplayListEx" &&
+         symbol != "GX2GetCurrentDisplayList" &&
+         symbol != "GX2EndDisplayList";
+     if (records_display_command) {
+diff --git a/nWiiURuntime/src/executor.cpp b/nWiiURuntime/src/executor.cpp
+index 72321c1..d65b92b 100644
+--- a/nWiiURuntime/src/executor.cpp
++++ b/nWiiURuntime/src/executor.cpp
+@@ -1,3 +1,8 @@
++#include <chrono>
++#include <vector>
++#include <map>
++#include <string>
++#include <set>
+ #include "runtime/executor.h"
+ 
+ #include "nwiiu/analyzer/ppc_instruction.h"
+@@ -46,6 +51,40 @@ ExecutionStop make_guest_fault_stop(const GuestFault& fault,
+ }
+ } // namespace
+ 
++std::string g_recent_imports[40000];
++size_t g_recent_pos = 0;
++void nwiiu_dump_recent_imports() {
++    for (size_t i = 0; i < 40000; ++i) {
++        const std::string& e = g_recent_imports[(g_recent_pos + i) % 40000];
++        if (!e.empty()) { std::fprintf(stderr, "RECENT-IMPORT %s", e.c_str()); std::fputc(10, stderr); }
++    }
++}
++static std::map<std::string, uint64_t> g_import_nanos;
++// LOCAL (SM3DW): NWIIU_FAULT_DUMP=1 prints registers and a back-chain stack walk at a guest fault.
++static void dump_fault_if_enabled(ExecutionImage& image, const CPUContext& cpu, const GuestFault& fault) {
++    if (std::getenv("NWIIU_FAULT_DUMP") == nullptr) return;
++    std::fprintf(stderr, "FAULT-DUMP pc=%08x lr=%08x ctr=%08x addr=%08x", fault.pc, cpu.lr, cpu.ctr, fault.address);
++    std::fputc(10, stderr);
++    for (int i = 0; i < 32; i += 4) {
++        std::fprintf(stderr, "FAULT-DUMP r%02d=%08x r%02d=%08x r%02d=%08x r%02d=%08x", i, cpu.gpr[i], i + 1,
++                     cpu.gpr[i + 1], i + 2, cpu.gpr[i + 2], i + 3, cpu.gpr[i + 3]);
++        std::fputc(10, stderr);
++    }
++    try {
++        uint32_t sp = cpu.gpr[1];
++        std::fprintf(stderr, "FAULT-DUMP backtrace (saved LRs):");
++        for (int depth = 0; depth < 24 && sp != 0; ++depth) {
++            const uint32_t back = image.memory.read32(sp, cpu.pc);
++            if (back == 0) break;
++            const uint32_t saved_lr = image.memory.read32(back + 4, cpu.pc);
++            std::fprintf(stderr, " %08x", saved_lr);
++            sp = back;
++        }
++    } catch (const GuestFault&) {
++    }
++    std::fputc(10, stderr);
++}
++
+ // Recompiled blocks do not record the raw instruction word on the hot path:
+ // that cost a store on every guest instruction for a field only a fault report
+ // reads. Recover it from the image at the faulting PC instead.
+@@ -169,6 +208,7 @@ void Executor::step(CPUContext& cpu) {
+                 unsupported(pc, "reserved paired-single FRB field");
+             }
+             break;
++        case 18: // ps_div
+         case 20: // ps_sub
+         case 21: // ps_add
+             if (instruction.frc() != 0) {
+@@ -194,7 +234,7 @@ void Executor::step(CPUContext& cpu) {
+                 if ((instruction.rt() & 3) != 0) {
+                     unsupported(pc, "reserved paired-single compare bits");
+                 }
+-            } else if (xo == 40) { // ps_neg
++            } else if (xo == 40 || xo == 72) { // ps_neg, ps_mr
+                 if (instruction.ra() != 0) {
+                     unsupported(pc, "reserved paired-single FRA field");
+                 }
+@@ -246,6 +286,7 @@ void Executor::step(CPUContext& cpu) {
+     case 48:
+     case 49:
+     case 50:
++    case 51:
+     case 52:
+     case 53:
+     case 54:
+@@ -352,6 +393,11 @@ void Executor::step(CPUContext& cpu) {
+         case 712:
+         case 202:
+         case 714:
++        case 232:
++        case 744:
++        case 234:
++        case 746:
++        case 284:
+         case 235:
+         case 536:
+         case 266:
+@@ -515,6 +561,8 @@ void Executor::step(CPUContext& cpu) {
+         } else if (xo == 624) {
+             ppc::ps_merge11(cpu, instruction.rt(), instruction.ra(),
+                             instruction.rb());
++        } else if (xo == 72) {
++            ppc::ps_mr(cpu, instruction.rt(), instruction.rb());
+         } else if (xo == 40) {
+             ppc::ps_neg(cpu, instruction.rt(), instruction.rb());
+         } else if (xo == 32) {
+@@ -522,6 +570,9 @@ void Executor::step(CPUContext& cpu) {
+                           instruction.rb());
+         } else if (xo == 26) {
+             ppc::ps_rsqrte(cpu, instruction.rt(), instruction.rb());
++        } else if (instruction.xo5() == 18) {
++            ppc::ps_div(cpu, instruction.rt(), instruction.ra(),
++                        instruction.rb());
+         } else if (instruction.xo5() == 25) {
+             ppc::ps_mul(cpu, instruction.rt(), instruction.ra(),
+                         instruction.frc());
+@@ -786,6 +837,20 @@ void Executor::step(CPUContext& cpu) {
+             ppc::andc(cpu, instruction.ra(), instruction.rs(),
+                       instruction.rb(), instruction.rc());
+             return;
++        case 284:
++            ppc::eqv(cpu, instruction.ra(), instruction.rs(),
++                     instruction.rb(), instruction.rc());
++            return;
++        case 232:
++        case 744:
++            ppc::subfme(cpu, instruction.rt(), instruction.ra(), xo == 744,
++                        instruction.rc());
++            return;
++        case 234:
++        case 746:
++            ppc::addme(cpu, instruction.rt(), instruction.ra(), xo == 746,
++                       instruction.rc());
++            return;
+         case 104:
+             ppc::neg(cpu, instruction.rt(), instruction.ra(),
+                      instruction.rc());
+@@ -985,6 +1050,10 @@ void Executor::step(CPUContext& cpu) {
+         ppc::lfd(cpu, image_.memory, instruction.rt(), instruction.ra(),
+                  instruction.simm());
+         return;
++    case 51:
++        ppc::lfdu(cpu, image_.memory, instruction.rt(), instruction.ra(),
++                  instruction.simm());
++        return;
+     case 52:
+         ppc::stfs(cpu, image_.memory, instruction.rs(), instruction.ra(),
+                   instruction.simm());
+@@ -1212,7 +1281,8 @@ ExecutionSlice Executor::run_slice(
+             try {
+                 native->thunk(cpu, image_.memory);
+             } catch (const GuestFault& fault) {
+-                return terminal(with_faulting_word(
++                dump_fault_if_enabled(image_, cpu, fault);
++            return terminal(with_faulting_word(
+                     make_guest_fault_stop(fault, cpu)));
+             }
+             continue;
+@@ -1224,6 +1294,52 @@ ExecutionSlice Executor::run_slice(
+         const auto import = image_.imports.find(cpu.pc);
+         if (import != image_.imports.end()) {
+             const auto handler = hle_handlers_.find(cpu.pc);
++            if (handler == hle_handlers_.end() &&
++                std::getenv("NWIIU_OFFLINE_STUBS") != nullptr) {
++                // LOCAL SCAFFOLDING (SM3DW bring-up): with NWIIU_OFFLINE_STUBS=1, imports from
++                // online/peripheral libraries that have no handler fail with -1 and are logged once.
++                // This is NOT an implementation of those libraries.
++                static const std::set<std::string> kOffline{
++                    "nn_olv", "nn_boss", "nn_fp", "nn_ac", "nn_act", "nn_ndm",
++                    "nn_acp", "nlibcurl", "nsysnet", "camera", "mic"};
++                static const std::set<std::string> kSilent{"snd_core", "snd_user", "sysapp"};
++                // GX2 state setters (Set*/Init* with no return value) are ignored and logged; GX2
++                // functions that return data or allocate (GX2R*, Get*, Calc*, Allocate*) still stop.
++                const bool gx2_setter =
++                    import->second.module == "gx2" &&
++                    (import->second.symbol.rfind("GX2Set", 0) == 0 ||
++                     import->second.symbol.rfind("GX2Save", 0) == 0 ||
++                     import->second.symbol.rfind("GX2Load", 0) == 0);
++                if (kSilent.contains(import->second.module) || gx2_setter) {
++                    static std::set<std::string> logged_silent;
++                    if (logged_silent.insert(import->second.module + ":" + import->second.symbol).second) {
++                        std::fprintf(stderr, "SILENT-STUB %s:%s", import->second.module.c_str(),
++                                     import->second.symbol.c_str());
++                        std::fputc(10, stderr);
++                    }
++                    cpu.gpr[3] = 0;
++                    ++cpu.instruction_count;
++                    cpu.pc = cpu.lr;
++                    continue;
++                }
++                if (kOffline.contains(import->second.module)) {
++                    static std::set<std::string> logged;
++                    if (logged.insert(import->second.module + ":" + import->second.symbol).second) {
++                        std::fprintf(stderr, "OFFLINE-STUB %s:%s\n", import->second.module.c_str(),
++                                     import->second.symbol.c_str());
++                    }
++                    cpu.gpr[3] = 0xFFFFFFFFu;
++                    cpu.gpr[4] = 0xFFFFFFFFu;
++                    // LOCAL: boolean queries about an online account: the offline answer is "no".
++                    if (import->second.module == "nn_act" &&
++                        import->second.symbol.rfind("IsNetworkAccount", 0) == 0) {
++                        cpu.gpr[3] = 0;
++                    }
++                    ++cpu.instruction_count;
++                    cpu.pc = cpu.lr;
++                    continue;
++                }
++            }
+             if (handler == hle_handlers_.end()) {
+                 auto stop = make_stop(StopCategory::missing_hle,
+                                       "unimplemented Cafe import", cpu);
+@@ -1233,16 +1349,60 @@ ExecutionSlice Executor::run_slice(
+                             stop.argument_gprs.begin());
+                 return terminal(std::move(stop));
+             }
++            {
++                // LOCAL (SM3DW): NWIIU_IMPORT_STATS=1 prints per-import call counts at exit.
++                struct Stats {
++                    std::map<std::string, uint64_t> counts;
++                    std::map<std::string, uint64_t> nanos;
++                    bool enabled = std::getenv("NWIIU_IMPORT_STATS") != nullptr;
++                    ~Stats() {
++                        if (!enabled) return;
++                        std::vector<std::pair<uint64_t, std::string>> rows;
++                        for (const auto& [k, v] : counts) rows.emplace_back(v, k);
++                        std::vector<std::pair<uint64_t, std::string>> trows;
++                        for (const auto& [k, v] : g_import_nanos) trows.emplace_back(v, k);
++                        std::sort(trows.rbegin(), trows.rend());
++                        for (size_t i = 0; i < trows.size() && i < 25; ++i) {
++                            std::fprintf(stderr, "IMPORT-TIME %.3fs %s", trows[i].first / 1e9, trows[i].second.c_str());
++                            std::fputc(10, stderr);
++                        }
++                        std::sort(rows.rbegin(), rows.rend());
++                        for (const auto& [n, k] : rows) {
++                            std::fprintf(stderr, "IMPORT-COUNT %llu %s", static_cast<unsigned long long>(n), k.c_str());
++                            std::fputc(10, stderr);
++                        }
++                    }
++                };
++                static Stats stats;
++                if (stats.enabled) ++stats.counts[import->second.module + ":" + import->second.symbol];
++            }
++            static const bool trace_all = std::getenv("NWIIU_EXIT_TRACE_ALL") != nullptr;
++            if (trace_all || (import->second.symbol.rfind("OSGetThreadSpecific",0)!=0 && import->second.symbol.rfind("DC",0)!=0 &&
++                import->second.symbol.find("Mutex")==std::string::npos && import->second.symbol.rfind("OSBlock",0)!=0 &&
++                import->second.symbol.rfind("mem",0)!=0 && import->second.symbol.rfind("OSIsAddr",0)!=0)) {
++                // LOCAL: ring of recent imports for NWIIU_EXIT_TRACE.
++                g_recent_imports[g_recent_pos++ % 40000] = (active_thread == 0 ? std::string("MAIN ") : std::string("T")+std::to_string(active_thread)+" ") + import->second.module + ":" + import->second.symbol +
++                    " r3=" + std::to_string(cpu.gpr[3]) + " r4=" + std::to_string(cpu.gpr[4]);
++            }
+             cpu.current_instruction.reset();
+             const size_t trace_slot =
+                 trace_enter(cpu.pc, active_thread, import->second);
+             HleAction action;
++            const auto t0 = std::chrono::steady_clock::now();
+             try {
+                 action = handler->second(cpu, image_.memory);
+             } catch (const GuestFault& fault) {
+-                return terminal(with_faulting_word(
++                dump_fault_if_enabled(image_, cpu, fault);
++            return terminal(with_faulting_word(
+                     make_guest_fault_stop(fault, cpu)));
+             }
++            if (std::getenv("NWIIU_IMPORT_STATS") != nullptr) {
++                static std::map<std::string, uint64_t>* tmap = nullptr;
++                (void)tmap;
++                g_import_nanos[import->second.module + ":" + import->second.symbol] +=
++                    static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
++                        std::chrono::steady_clock::now() - t0).count());
++            }
+             if (!cpu.running || action == HleAction::exit) {
+                 cpu.running = false;
+                 return terminal(make_stop(StopCategory::guest_exit,
+@@ -1262,6 +1422,7 @@ ExecutionSlice Executor::run_slice(
+         try {
+             step(cpu);
+         } catch (const GuestFault& fault) {
++            dump_fault_if_enabled(image_, cpu, fault);
+             return terminal(with_faulting_word(
+                 make_guest_fault_stop(fault, cpu)));
+         }
+diff --git a/nWiiURuntime/src/gx2_runtime.cpp b/nWiiURuntime/src/gx2_runtime.cpp
+index 97f1b79..bee67bf 100644
+--- a/nWiiURuntime/src/gx2_runtime.cpp
++++ b/nWiiURuntime/src/gx2_runtime.cpp
+@@ -138,8 +138,16 @@ void clear_color_surface(GuestMemory& memory, uint32_t descriptor,
+     const uint32_t image = read_be32(memory, descriptor + 0x24, pc);
+     if ((format != 0x19 && format != 0x1A) || image == 0 ||
+         image_size == 0) {
+-        throw GuestFault("unsupported GX2 color clear surface", descriptor,
+-                         kColorBufferSize, pc, MemoryAccess::read);
++        // LOCAL (SM3DW): other formats (e.g. the HDR 11-11-10 float target) are not written into
++        // guest memory here; the renderer clears its own GPU target via the clear_color event.
++        static bool reported = false;
++        if (!reported) {
++            reported = true;
++            std::fprintf(stderr, "CLEARCOLOR-SKIPPED-GUEST-WRITE format=0x%x image=0x%x size=%u", format,
++                         image, image_size);
++            std::fputc(10, stderr);
++        }
++        return;
+     }
+     std::array<uint8_t, 4> rgba{
+         unorm8(color[0]), unorm8(color[1]), unorm8(color[2]),
+@@ -782,6 +790,38 @@ void copy_surface(GuestMemory& memory, CPUContext& cpu) {
+     case 0x1A:
+         bytes_per_element = 4;
+         break;
++    // LOCAL (SM3DW): more uncompressed formats. A copy only moves bytes, so the element size is enough
++    // (ids per GX2SurfaceFormat as recalled: 0x01 R8; 0x05 R16; 0x08/0x0A/0x0B packed 16-bit; 0x19 R10G10B10A2).
++    case 0x01:
++        bytes_per_element = 1;
++        break;
++    case 0x05:
++    case 0x08:
++    case 0x0A:
++    case 0x0B:
++        bytes_per_element = 2;
++        break;
++    case 0x19:
++        bytes_per_element = 4;
++        break;
++    // LOCAL: remaining common uncompressed formats (sizes only; ids recalled from GX2SurfaceFormat).
++    case 0x0D:  // R32
++    case 0x0F:  // R16_G16
++    case 0x10:  // R16_G16_FLOAT
++    case 0x11:  // D24_S8
++    case 0x16:  // R11_G11_B10_FLOAT
++        bytes_per_element = 4;
++        break;
++    case 0x1D:  // R32_G32
++    case 0x1E:  // R32_G32_FLOAT
++    case 0x1F:  // R16_G16_B16_A16
++    case 0x20:  // R16_G16_B16_A16_FLOAT
++        bytes_per_element = 8;
++        break;
++    case 0x22:  // R32_G32_B32_A32
++    case 0x23:  // R32_G32_B32_A32_FLOAT
++        bytes_per_element = 16;
++        break;
+     }
+ 
+     const auto supported_mode = supported_surface_mode;
+@@ -791,6 +831,13 @@ void copy_surface(GuestMemory& memory, CPUContext& cpu) {
+         destination_aa != 0 || source_width == 0 || source_height == 0 ||
+         destination_width == 0 || destination_height == 0 ||
+         !supported_mode(source_mode) || !supported_mode(destination_mode)) {
++        std::fprintf(stderr,
++                     "COPYSURFACE-UNSUPPORTED fmt=0x%x/0x%x mode=%u/%u size=%ux%u->%ux%u aa=%u/%u "
++                     "args=%x,%x,%x,%x", source_format, destination_format, source_mode,
++                     destination_mode, source_width, source_height, destination_width,
++                     destination_height, source_aa, destination_aa, cpu.gpr[4], cpu.gpr[5],
++                     cpu.gpr[7], cpu.gpr[8]);
++        std::fputc(10, stderr);
+         throw GuestFault("unsupported GX2CopySurface layout", source,
+                          surface_size, pc, MemoryAccess::read);
+     }
+@@ -1638,6 +1685,14 @@ void Gx2Runtime::register_handlers(CafeRuntime& runtime) {
+             cpu.gpr[3] = 1;
+             return HleAction::return_to_lr;
+         });
++    // LOCAL (SM3DW): GX2GetDisplayListWriteStatus() -> BOOL, true while this core is recording
++    // a display list (signature recalled from wut/decaf, not verified against the game).
++    runtime.register_handler(
++        "gx2", "GX2GetDisplayListWriteStatus",
++        [this](CPUContext& cpu, GuestMemory&) {
++            cpu.gpr[3] = current_display_list().active ? 1u : 0u;
++            return HleAction::return_to_lr;
++        });
+     runtime.register_handler(
+         "gx2", "GX2EndDisplayList",
+         [this](CPUContext& cpu, GuestMemory&) {
+@@ -2492,6 +2547,13 @@ void Gx2Runtime::register_handlers(CafeRuntime& runtime) {
+             if (!format || surface.aa != 0 ||
+                 view_mip >= std::max(surface.mip_levels, 1u) ||
+                 num_slices == 0 || slices == 0) {
++                std::fprintf(stderr,
++                             "COLORBUFFER-UNSUPPORTED format=0x%x (base 0x%x numfmt %u) dim=%u %ux%ux%u "
++                             "aa=%u tile=%u mips=%u view_mip=%u num_slices=%u",
++                             surface.format, surface.format & 0x3Fu, surface.format >> 8, surface.dim,
++                             surface.width, surface.height, surface.depth, surface.aa, surface.tile_mode,
++                             surface.mip_levels, view_mip, num_slices);
++                std::fputc(10, stderr);
+                 throw GuestFault("unsupported GX2 color buffer layout",
+                                  address, kColorBufferSize, cpu.pc,
+                                  MemoryAccess::read);
+@@ -2518,6 +2580,12 @@ void Gx2Runtime::register_handlers(CafeRuntime& runtime) {
+             const auto* layout = std::get_if<LatteSurfaceLayout>(&result);
+             if (layout == nullptr || layout->pitch < 8 ||
+                 (layout->pitch & 7u) != 0) {
++                std::fprintf(stderr,
++                             "COLORBUFFER-LAYOUT-UNSUPPORTED format=0x%x dim=%u %ux%ux%u tile=%u layout=%s pitch=%u",
++                             surface.format, surface.dim, level_surface.width, level_surface.height,
++                             level_surface.depth, level_surface.tile_mode,
++                             layout == nullptr ? "none" : "ok", layout == nullptr ? 0u : layout->pitch);
++                std::fputc(10, stderr);
+                 throw GuestFault("unsupported GX2 color buffer layout",
+                                  address, kColorBufferSize, cpu.pc,
+                                  MemoryAccess::read);
+diff --git a/nWiiURuntime/src/latte_shader.cpp b/nWiiURuntime/src/latte_shader.cpp
+index 6ff5faa..304d6ef 100644
+--- a/nWiiURuntime/src/latte_shader.cpp
++++ b/nWiiURuntime/src/latte_shader.cpp
+@@ -50,7 +50,8 @@ uint32_t components(uint32_t format) {
+     case 47:
+     case 48: return 3;
+     case 34:
+-    case 35: return 4;
++    case 35:
++    case 26: return 4;  // LOCAL: 26 = FMT_8_8_8_8
+     default:
+         throw std::runtime_error("unsupported Latte vertex format " +
+                                  std::to_string(format));
+@@ -128,7 +129,10 @@ uint32_t source_count(const AluInstruction& instruction) {
+         return 3;
+     }
+     switch ((instruction.w1 >> 7) & 0x7FFu) {
+-    case 0x19: return 1;
++    case 0x19:
++    case 0x15:
++    case 0x16:
++    case 0x18: return 1;
+     case 0x50: return 2;
+     default: return 2;
+     }
+@@ -166,10 +170,30 @@ std::string source(const AluInstruction& instruction, uint32_t index,
+         negate = ((instruction.w1 >> 12) & 1u) != 0;
+     }
+ 
++    // LOCAL: relative addressing through the address register AR.
++    bool relative = false;
++    if (index == 0) {
++        relative = ((instruction.w0 >> 9) & 1u) != 0;
++    } else if (index == 1) {
++        relative = ((instruction.w0 >> 22) & 1u) != 0;
++    } else {
++        relative = ((instruction.w1 >> 9) & 1u) != 0;
++    }
++    std::string rel_suffix;
++    if (relative) {
++        const uint32_t mode = (instruction.w0 >> 26) & 7u;
++        if (mode > 3) {
++            throw std::runtime_error("unsupported Latte LOOP index mode");
++        }
++        rel_suffix = std::string{" + AR."} + kChannel[mode];
++    }
+     std::string value;
+     if (selector < 128) {
+-        value = "R[" + std::to_string(selector) + "]." + kChannel[channel];
++        value = "R[" + std::to_string(selector) + rel_suffix + "]." + kChannel[channel];
+     } else if (selector < 192) {
++        if (relative) {
++            throw std::runtime_error("unsupported Latte relative kcache access");
++        }
+         const uint32_t cache = selector < 160 ? 0 : 1;
+         const LatteUniformBlockRef ref{
+             kcache_banks[cache],
+@@ -183,7 +207,7 @@ std::string source(const AluInstruction& instruction, uint32_t index,
+                     static_cast<size_t>(found - block_refs.begin())) +
+                 "]." + kChannel[channel];
+     } else if (selector >= 256) {
+-        value = "c[" + std::to_string(selector - 256) + "]." +
++        value = "c[" + std::to_string(selector - 256) + rel_suffix + "]." +
+                 kChannel[channel];
+     } else {
+         switch (selector) {
+@@ -335,7 +359,8 @@ private:
+         std::ostringstream writes;
+         size_t first_instruction = 0;
+         if (!group.empty() &&
+-            ((group.front().w1 >> 7) & 0x7FFu) == 0x50) {
++            (((group.front().w1 >> 7) & 0x7FFu) == 0x50 ||
++             ((group.front().w1 >> 7) & 0x7FFu) == 0x51)) {  // LOCAL: 0x51 DOT4_IEEE treated as DOT4
+             if (group.size() < 4) {
+                 throw std::runtime_error(
+                     "Latte DOT4 group must contain four lanes");
+@@ -459,6 +484,20 @@ private:
+                     expression =
+                         "(" + first + " >= " + second + " ? 1.0 : 0.0)";
+                     break;
++                // LOCAL: remaining DX10-style compares (result is an integer mask like 0x0D above)
++                case 0x0C:
++                    expression = "intBitsToFloat((" + first + " == " + second + " ? -1 : 0))";
++                    break;
++                case 0x0E:
++                    expression = "intBitsToFloat((" + first + " >= " + second + " ? -1 : 0))";
++                    break;
++                case 0x0F:
++                    expression = "intBitsToFloat((" + first + " != " + second + " ? -1 : 0))";
++                    break;
++                // LOCAL: SIN/COS take their argument in turns (1.0 = 2*pi), per the R6xx hardware
++                // behaviour that Mesa's r600 backend compensates for. Not verified on this game.
++                case 0x6E: expression = "sin(" + first + " * 6.28318530718)"; break;
++                case 0x6F: expression = "cos(" + first + " * 6.28318530718)"; break;
+                 case 0x0B:
+                     expression =
+                         "(" + first + " != " + second + " ? 1.0 : 0.0)";
+@@ -520,6 +559,12 @@ private:
+                         ") ? 0xFFFFFFFFu : 0u)";
+                     break;
+                 case 0x10: expression = "fract(" + first + ")"; break;
++                // LOCAL: TRUNC, CEIL, LOG_IEEE, RECIPSQRT_CLAMPED/FF
++                case 0x11: expression = "trunc(" + first + ")"; break;
++                case 0x12: expression = "ceil(" + first + ")"; break;
++                case 0x63: expression = "log2(" + first + ")"; break;
++                case 0x67:
++                case 0x68: expression = "inversesqrt(" + first + ")"; break;
+                 case 0x14: expression = "floor(" + first + ")"; break;
+                 case 0x19: expression = first; break;
+                 case 0x13: expression = "roundEven(" + first + ")"; break;
+@@ -564,6 +609,20 @@ private:
+                 case 0x79:
+                     expression = "uintBitsToFloat(uint(" + first + "))";
+                     break;
++                case 0x15:
++                case 0x16:
++                case 0x18: {
++                    // LOCAL: write the address register. 0x15 MOVA rounds to nearest, 0x16
++                    // MOVA_FLOOR floors, 0x18 MOVA_INT takes the integer bit pattern.
++                    const uint32_t ar_channel = (instruction.w1 >> 29) & 3u;
++                    std::string index_expr =
++                        opcode == 0x16 ? "int(floor(" + first + "))"
++                        : opcode == 0x15 ? "int(roundEven(" + first + "))"
++                                         : "floatBitsToInt(" + first + ")";
++                    output << "  AR." << kChannel[ar_channel] << " = clamp(" << index_expr
++                           << ", -256, 255);\n";
++                    continue;
++                }
+                 case 0x46:
+                     if (std::string_view(stage_) != "pixel") {
+                         throw std::runtime_error("KILLE_INT outside pixel shader");
+@@ -615,9 +674,16 @@ private:
+             output << "  float alu" << group_id << "_" << i << " = "
+                    << expression << ";\n";
+             if (encoding != 0 || ((instruction.w1 >> 4) & 1u) != 0) {
+-                writes << "  R[" << ((instruction.w1 >> 21) & 0x7Fu) << "]."
+-                       << kChannel[channel] << " = alu" << group_id << "_" << i
+-                       << ";\n";
++                std::string destination = std::to_string((instruction.w1 >> 21) & 0x7Fu);
++                if (((instruction.w1 >> 28) & 1u) != 0) {  // LOCAL: DST_REL
++                    const uint32_t mode = (instruction.w0 >> 26) & 7u;
++                    if (mode > 3) {
++                        throw std::runtime_error("unsupported Latte LOOP index mode");
++                    }
++                    destination += std::string{" + AR."} + kChannel[mode];
++                }
++                writes << "  R[" << destination << "]." << kChannel[channel]
++                       << " = alu" << group_id << "_" << i << ";\n";
+             }
+             if (predicate_name.empty()) {
+                 if (scalar) {
+@@ -799,7 +865,7 @@ LatteTranslation translate_latte(const LatteShaderInput& input) {
+            << std::max<size_t>(1, result.vertex_uniform_blocks.size())
+            << "]; };\n"
+               "void main() {\n"
+-              "  vec4 R[128]; vec4 PV=vec4(0.0); float PS=0.0;\n"
++              "  vec4 R[128]; vec4 PV=vec4(0.0); float PS=0.0; ivec4 AR=ivec4(0);\n"
+               "  bool execActive=true, predicateState=false; "
+               "bool execStack[4]; int execStackIndex=0;\n";
+     vertex << "  for (int i = 0; i < 128; ++i) R[i] = vec4(0.0);\n"
+@@ -875,7 +941,7 @@ LatteTranslation translate_latte(const LatteShaderInput& input) {
+         fragment << "  outColor0 = texelFetch(tex"
+                  << result.ps_sampler_slots.front() << ", ivec2(0), 0);\n";
+     } else {
+-        fragment << "  vec4 R[128]; vec4 PV=vec4(0.0); float PS=0.0;\n"
++        fragment << "  vec4 R[128]; vec4 PV=vec4(0.0); float PS=0.0; ivec4 AR=ivec4(0);\n"
+                     "  bool execActive=true, predicateState=false; "
+                     "bool execStack[4]; int execStackIndex=0;\n"
+                     "  for (int i = 0; i < 128; ++i) R[i] = vec4(0.0);\n";
+diff --git a/nWiiURuntime/src/latte_surface.cpp b/nWiiURuntime/src/latte_surface.cpp
+index b9b987f..81c017e 100644
+--- a/nWiiURuntime/src/latte_surface.cpp
++++ b/nWiiURuntime/src/latte_surface.cpp
+@@ -261,9 +261,14 @@ calculate_surface_size_and_alignment(const LatteSurfaceDescriptor& surface) {
+         return surface_error(LatteSurfaceComputeErrorCode::unsupported_dim,
+                              surface);
+     }
++    // LOCAL (SM3DW): also accept LinearAligned and the thick modes, which compute_addr_surface_info
++    // already implements. Only size/alignment is covered; detiling for these is not verified.
+     if (surface.tile_mode != kTileDefault &&
++        surface.tile_mode != kTileLinearAligned &&
+         surface.tile_mode != kTile1DThin1 &&
++        surface.tile_mode != kTile1DThick &&
+         surface.tile_mode != kTile2DThin1 &&
++        surface.tile_mode != kTile2DThick &&
+         surface.tile_mode != kTileLinearSpecial) {
+         return surface_error(LatteSurfaceComputeErrorCode::unsupported_tile_mode,
+                              surface);
+diff --git a/nWiiURuntime/src/machine.cpp b/nWiiURuntime/src/machine.cpp
+index c9b3fb1..bf64158 100644
+--- a/nWiiURuntime/src/machine.cpp
++++ b/nWiiURuntime/src/machine.cpp
+@@ -1,3 +1,6 @@
++#include <vector>
++#include <map>
++#include <iostream>
+ #include "runtime/machine.h"
+ 
+ #include <algorithm>
+@@ -249,6 +252,20 @@ void Machine::begin_callback(Thread& candidate) {
+     callback_saved_context_ = candidate.cpu;
+     active_callback_ = callback;
+     callback_thread_address_ = candidate.address;
++    // LOCAL: run the callback on a fresh area well below the interrupted frame. Interrupted guest code
++    // may still read just-released frame slots below r1; real Cafe runs callbacks on other stacks.
++    {
++        uint32_t sp = candidate.cpu.gpr[1];
++        uint32_t low = 0;
++        try {
++            low = image_.memory.read32(candidate.address + abi::kOsThreadStackEndOffset, 0);
++        } catch (...) {}
++        // Only shift when the thread's recorded stack has clear room (keep 0x800 spare).
++        if (low != 0 && sp > low && sp - low > 0x1800u) {
++            sp = (sp - 0x400u) & ~0xFu;
++            candidate.cpu.gpr[1] = sp;
++        }
++    }
+     candidate.cpu.pc = callback.function;
+     candidate.cpu.lr = callback_return_address_;
+     candidate.cpu.gpr[3] = callback.argument;
+@@ -282,6 +299,9 @@ bool Machine::return_from_callback() {
+ 
+ ExecutionStop Machine::scheduler_stop(StopCategory category, const char* reason,
+                                       uint64_t instruction_count) const {
++    if (std::getenv("NWIIU_THREAD_DUMP") != nullptr) {
++        dump_threads(std::cerr);  // LOCAL: scheduler state of every thread at stop
++    }
+     ExecutionStop stop;
+     stop.category = category;
+     stop.reason = reason;
+@@ -311,6 +331,7 @@ ExecutionStop Machine::run(uint64_t global_instruction_budget,
+         throw std::invalid_argument("scheduler quantum must be positive");
+     }
+     uint64_t executed = 0;
++    uint64_t zero_slice_streak = 0;
+     if (global_instruction_budget == 0) {
+         return scheduler_stop(StopCategory::instruction_budget,
+                               "global instruction budget exhausted", 0);
+@@ -318,6 +339,7 @@ ExecutionStop Machine::run(uint64_t global_instruction_budget,
+ 
+     while (executed < global_instruction_budget) {
+         wake_elapsed_sleepers();
++        coreinit_.service_alarms();  // LOCAL: fire due OS alarms
+         current_ = select_ready();
+         if (current_ == nullptr) {
+             if (wake_earliest_sleeper()) {
+@@ -355,7 +377,59 @@ ExecutionStop Machine::run(uint64_t global_instruction_budget,
+                                          current_->address);
+         const uint64_t delta = current_->cpu.instruction_count - before;
+         executed += delta;
+-        coreinit_.advance_ticks(delta);
++        {
++            // LOCAL (SM3DW): NWIIU_PC_SAMPLE=1 -> histogram of the PC at the end of each slice,
++            // weighted by instructions executed in that slice; top entries printed at exit.
++            struct Hist {
++                std::map<uint32_t, uint64_t> weight;
++                bool enabled = std::getenv("NWIIU_PC_SAMPLE") != nullptr;
++                ~Hist() {
++                    if (!enabled) return;
++                    std::vector<std::pair<uint64_t, uint32_t>> rows;
++                    for (const auto& [pc, w] : weight) rows.emplace_back(w, pc);
++                    std::sort(rows.rbegin(), rows.rend());
++                    for (size_t i = 0; i < rows.size() && i < 400; ++i) {
++                        std::fprintf(stderr, "PC-SAMPLE %llu %08x", static_cast<unsigned long long>(rows[i].first), rows[i].second);
++                        std::fputc(10, stderr);
++                    }
++                }
++            };
++            static Hist hist;
++            static uint64_t seen = 0;
++            static const uint64_t after = [] {
++                const char* v = std::getenv("NWIIU_PC_SAMPLE_AFTER");
++                return v == nullptr ? uint64_t{0} : std::strtoull(v, nullptr, 10);
++            }();
++            seen += delta;
++            if (hist.enabled && seen >= after) hist.weight[current_->cpu.pc] += delta;
++        }
++        {
++            // LOCAL: guest time base. Default 1 instruction per tick (unchanged). The real console
++            // retires ~20 instructions per 62.156 MHz tick (1.243 GHz core), so SM3DW runs set
++            // NWIIU_INSTR_PER_TICK=20 to stop timers/watchdogs firing ~20x too early.
++            static const uint64_t per_tick = [] {
++                const char* v = std::getenv("NWIIU_INSTR_PER_TICK");
++                const uint64_t n = v == nullptr ? 1 : std::strtoull(v, nullptr, 10);
++                return n == 0 ? uint64_t{1} : n;
++            }();
++            static uint64_t carry = 0;
++            carry += delta;
++            coreinit_.advance_ticks(carry / per_tick);
++            carry %= per_tick;
++        }
++        // LOCAL (SM3DW): livelock detector. Many consecutive slices that execute nothing means the
++        // scheduler is cycling (e.g. block/reschedule/re-execute) without making progress.
++        if (delta == 0) {
++            if (++zero_slice_streak > 2000000) {
++                dump_threads(std::cerr);
++                current_ = nullptr;
++                return scheduler_stop(StopCategory::deadlock,
++                                      "Cafe scheduler livelock (no instructions executed)",
++                                      executed);
++            }
++        } else {
++            zero_slice_streak = 0;
++        }
+ 
+         if (slice.category == SliceCategory::terminal) {
+             if (slice.terminal->category == StopCategory::guest_exit) {
+@@ -437,15 +511,74 @@ void Machine::block_current(uint32_t wait_object) {
+     block_thread(current_->address, wait_object);
+ }
+ 
++void Machine::block_current_timed(uint32_t wait_object, uint64_t delta_ticks) {
++    if (current_ == nullptr) {
++        throw std::logic_error("no current Cafe thread");
++    }
++    block_thread(current_->address, wait_object);
++    current_->sleeping = true;
++    const uint64_t now = current_time_ticks();
++    current_->wake_tick = delta_ticks > UINT64_MAX - now ? UINT64_MAX : now + delta_ticks;
++}
++
++void nwiiu_dump_recent_imports();
+ void Machine::exit_current(int32_t value) {
+     if (current_ == nullptr) {
+         throw std::logic_error("no current Cafe thread");
+     }
++    if (std::getenv("NWIIU_EXIT_TRACE") != nullptr) {
++        // LOCAL: who exited, with what value, and the last guest PCs it executed.
++        const auto& c = current_->cpu;
++        std::fprintf(stderr, "THREAD-EXIT address=0x%08x value=%d lr=0x%08x r1=0x%08x pcs:", current_->address,
++                     value, c.lr, c.gpr[1]);
++        {
++            std::string tname;
++            try {
++                uint32_t np = image_.memory.read32(current_->address + 0x5C0, 0);
++                for (uint32_t a = np; np != 0 && tname.size() < 48; ++a) {
++                    const char ch = static_cast<char>(image_.memory.read8(a, 0));
++                    if (ch == 0) break;
++                    tname.push_back(ch);
++                }
++            } catch (...) {}
++            {
++                std::string chain;
++                try {
++                    uint32_t sp = current_->cpu.gpr[1];
++                    for (int depth = 0; depth < 24 && sp != 0; ++depth) {
++                        const uint32_t back = image_.memory.read32(sp, 0);
++                        if (back <= sp) break;
++                        char buf[16];
++                        std::snprintf(buf, sizeof buf, " %08x", image_.memory.read32(back + 4, 0));
++                        chain += buf;
++                        sp = back;
++                    }
++                } catch (...) {}
++                std::fprintf(stderr, "STACK-WALK%s", chain.c_str());
++                std::fputc(10, stderr);
++            }
++            std::fprintf(stderr, "THREAD-NAME %s", tname.c_str());
++            std::fputc(10, stderr);
++        }
++        const size_t n = c.history_size;
++        for (size_t i = 0; i < n; ++i) {
++            const size_t idx = (c.history_cursor + c.pc_history.size() - n + i) % c.pc_history.size();
++            std::fprintf(stderr, " %08x", c.pc_history[idx]);
++        }
++        std::fputc(10, stderr);
++        nwiiu_dump_recent_imports();
++        {
++            static bool first = true;
++            if (first) { first = false; dump_threads(std::cerr); }  // LOCAL
++        }
++    }
+     image_.memory.write32(
+         current_->address + abi::kOsThreadExitValueOffset,
+         static_cast<uint32_t>(value), current_->cpu.pc);
+     current_->state = ThreadState::moribund;
+     coreinit_.set_thread_state(current_->address, abi::kThreadMoribund);
++    // LOCAL (SM3DW): wake OSJoinThread waiters (they block on the target thread's address).
++    wake_waiters(current_->address);
+ }
+ 
+ void Machine::block_thread(uint32_t thread_address, uint32_t wait_object) {
+diff --git a/nWiiURuntime/src/memory.cpp b/nWiiURuntime/src/memory.cpp
+index d370d78..f2079af 100644
+--- a/nWiiURuntime/src/memory.cpp
++++ b/nWiiURuntime/src/memory.cpp
+@@ -20,6 +20,15 @@ bool permits(MemoryPermissions permissions, MemoryAccess access) {
+     }
+     return false;
+ }
++// LOCAL: getenv is slow on Windows and these used to run on every guest store.
++bool pool_trace_enabled() {
++    static const bool enabled = std::getenv("NWIIU_POOL_TRACE") != nullptr;
++    return enabled;
++}
++bool matrix_trace_enabled() {
++    static const bool enabled = std::getenv("NWIIU_MATRIX_TRACE") != nullptr;
++    return enabled;
++}
+ bool overlaps_matrix_trace(uint32_t address, uint64_t size) {
+     const uint64_t end = static_cast<uint64_t>(address) + size;
+     return (address < 0x3B77A5C0u && end > 0x3B77A590u) ||
+@@ -85,6 +94,17 @@ void GuestMemory::map(uint32_t address, uint32_t size,
+     }
+ 
+     mappings_.insert(next, Mapping{address, size, permissions});
++    // LOCAL: pages fully inside this mapping get fast-path permission bits (1=read, 2=write).
++    // Partially covered edge pages keep 0 and so keep taking the exact slow path.
++    {
++        const uint64_t first = (static_cast<uint64_t>(address) + kPageSize - 1) / kPageSize;
++        const uint64_t last = end / kPageSize;  // exclusive
++        const uint8_t bits = static_cast<uint8_t>((permissions.readable ? 1u : 0u) |
++                                                  (permissions.writable ? 2u : 0u));
++        for (uint64_t pg = first; pg < last; ++pg) {
++            perm_[static_cast<size_t>(pg)] = bits;
++        }
++    }
+     for (std::size_t copied = 0; copied < initial.size();) {
+         const uint32_t current = address + static_cast<uint32_t>(copied);
+         const auto count = std::min<std::size_t>(
+@@ -223,6 +243,7 @@ uint8_t* GuestMemory::page(uint32_t address) {
+     if (inserted) {
+         found->second.fill(0);
+     }
++    table_[address >> 12] = found->second.data();  // LOCAL: direct page table (see memory.h)
+     return found->second.data() + (address & (kPageSize - 1));
+ }
+ 
+@@ -310,7 +331,7 @@ void GuestMemory::write8_slow(uint32_t address, uint8_t value, uint32_t pc) {
+     }
+     check(address, 1, pc, MemoryAccess::write);
+     if ((address == 0x39DE6FE0u || address == 0x39DE7000u) &&
+-        std::getenv("NWIIU_POOL_TRACE") != nullptr) {
++        pool_trace_enabled()) {
+         std::fprintf(stderr, "POOLBYTE pc=%08X address=%08X value=%02X\n",
+                      pc, address, value);
+     }
+@@ -323,7 +344,7 @@ void GuestMemory::write16_slow(uint32_t address, uint16_t value, uint32_t pc) {
+         return;
+     }
+     check(address, 2, pc, MemoryAccess::write);
+-    if (std::getenv("NWIIU_POOL_TRACE") != nullptr &&
++    if (pool_trace_enabled() &&
+         ((address <= 0x39DE6FE0u && 0x39DE6FE0u - address < 2) ||
+          (address <= 0x39DE7000u && 0x39DE7000u - address < 2))) {
+         std::fprintf(stderr, "POOL16 pc=%08X address=%08X value=%04X\n",
+@@ -348,13 +369,13 @@ void GuestMemory::write32_slow(uint32_t address, uint32_t value, uint32_t pc) {
+         return;
+     }
+     check(address, 4, pc, MemoryAccess::write);
+-    if (std::getenv("NWIIU_POOL_TRACE") != nullptr &&
++    if (pool_trace_enabled() &&
+         (address == 0x39DE6FE0u || address == 0x39DE7000u) &&
+         value > 0x100000u) {
+         std::fprintf(stderr, "POOL32 pc=%08X address=%08X value=%08X\n",
+                      pc, address, value);
+     }
+-    if (std::getenv("NWIIU_MATRIX_TRACE") != nullptr &&
++    if (matrix_trace_enabled() &&
+         overlaps_matrix_trace(address, 4)) {
+         std::fprintf(stderr, "MATRIX32 pc=%08X address=%08X value=%08X\n",
+                      pc, address, value);
+@@ -380,13 +401,13 @@ void GuestMemory::write64_slow(uint32_t address, uint64_t value, uint32_t pc) {
+         return;
+     }
+     check(address, 8, pc, MemoryAccess::write);
+-    if (std::getenv("NWIIU_POOL_TRACE") != nullptr &&
++    if (pool_trace_enabled() &&
+         ((address <= 0x39DE6FE0u && 0x39DE6FE0u - address < 8) ||
+          (address <= 0x39DE7000u && 0x39DE7000u - address < 8))) {
+         std::fprintf(stderr, "POOL64 pc=%08X address=%08X value=%016llX\n",
+                      pc, address, static_cast<unsigned long long>(value));
+     }
+-    if (std::getenv("NWIIU_MATRIX_TRACE") != nullptr &&
++    if (matrix_trace_enabled() &&
+         overlaps_matrix_trace(address, 8)) {
+         std::fprintf(stderr, "MATRIX64 pc=%08X address=%08X value=%016llX\n",
+                      pc, address, static_cast<unsigned long long>(value));
+@@ -445,7 +466,7 @@ void GuestMemory::write_bytes(uint32_t address,
+     }
+     validate_range(address, static_cast<uint32_t>(input.size()), pc,
+                    MemoryAccess::write);
+-    if (std::getenv("NWIIU_POOL_TRACE") != nullptr &&
++    if (pool_trace_enabled() &&
+         ((address <= 0x39DE6FE0u &&
+           0x39DE6FE0u - address < input.size()) ||
+          (address <= 0x39DE7000u &&
+@@ -453,7 +474,7 @@ void GuestMemory::write_bytes(uint32_t address,
+         std::fprintf(stderr, "POOLBYTES pc=%08X address=%08X size=%zu\n",
+                      pc, address, input.size());
+     }
+-    if (std::getenv("NWIIU_MATRIX_TRACE") != nullptr &&
++    if (matrix_trace_enabled() &&
+         overlaps_matrix_trace(address, input.size())) {
+         std::fprintf(stderr, "MATRIXBYTES pc=%08X address=%08X size=%zu\n",
+                      pc, address, input.size());
+@@ -486,13 +507,13 @@ void GuestMemory::fill(uint32_t address, uint32_t size,
+         throw std::invalid_argument("guest memory fill pattern is empty");
+     }
+     validate_range(address, size, pc, MemoryAccess::write);
+-    if (std::getenv("NWIIU_POOL_TRACE") != nullptr &&
++    if (pool_trace_enabled() &&
+         ((address <= 0x39DE6FE0u && 0x39DE6FE0u - address < size) ||
+          (address <= 0x39DE7000u && 0x39DE7000u - address < size))) {
+         std::fprintf(stderr, "POOLFILL pc=%08X address=%08X size=%u\n",
+                      pc, address, size);
+     }
+-    if (std::getenv("NWIIU_MATRIX_TRACE") != nullptr &&
++    if (matrix_trace_enabled() &&
+         overlaps_matrix_trace(address, size)) {
+         std::fprintf(stderr, "MATRIXFILL pc=%08X address=%08X size=%u\n",
+                      pc, address, size);
+diff --git a/nWiiURuntime/src/native_hooks.cpp b/nWiiURuntime/src/native_hooks.cpp
+index e6c39fb..380aac2 100644
+--- a/nWiiURuntime/src/native_hooks.cpp
++++ b/nWiiURuntime/src/native_hooks.cpp
+@@ -60,14 +60,207 @@ void yaz0_decode(CPUContext& cpu, GuestMemory& memory) {
+     cpu.pc = cpu.lr;
+ }
+ 
++
++// LOCAL (SM3DW): resumable (streaming) Yaz0 decoder at 0x026BBF1C, transliterated from the guest code
++// (RedCarpet.rpx EU rev1) including its header helper at 0x026BBE28. r3 = state, r4 = source, r5 = source
++// length; returns the remaining output byte count (state+4), -1 or -2 like the guest.
++// State: +0 dst, +4 remaining (s32), +8 limit (nonzero = output budget given), +0xC bit mask, +0xD code byte,
++// +0xE saved first copy byte, +0x10 phase (0 = read code/literal, 1 = copy second byte, 2 = long length),
++// +0x14 u16 copy distance, +0x16 header bytes still expected.
++// Differences from the guest: dcbz cache-line zeroing is not performed (every zeroed byte is overwritten
++// by later output); the degenerate copy length 0 (guest loops 2^32 times) is skipped.
++void yaz0_decode_stream(CPUContext& cpu, GuestMemory& memory) {
++    const uint32_t pc = cpu.pc;
++    const uint32_t state = cpu.gpr[3];
++    uint32_t src = cpu.gpr[4];
++    int32_t len = static_cast<int32_t>(cpu.gpr[5]);
++    uint64_t work = 0;
++    const auto finish = [&](int32_t result) {
++        cpu.gpr[3] = static_cast<uint32_t>(result);
++        cpu.instruction_count += 60 + work;
++        cpu.pc = cpu.lr;
++    };
++    if (memory.read8(state + 0x16, pc) != 0) {
++        // header helper (0x026BBE28)
++        int32_t consumed = 0;
++        uint32_t counter = memory.read8(state + 0x16, pc);
++        const uint32_t hsrc = src;
++        int32_t hlen = len;
++        bool bad = false;
++        bool returned_early = false;
++        while (counter != 0) {
++            --counter;
++            memory.write8(state + 0x16, static_cast<uint8_t>(counter), pc);
++            const uint8_t byte = memory.read8(hsrc + consumed, pc);
++            if (counter >= 12) {
++                const uint8_t expected = counter == 15 ? 0x59 : counter == 14 ? 0x61 : counter == 13 ? 0x7A : 0x30;
++                if (byte != expected) {
++                    bad = true;
++                    break;
++                }
++            } else if (counter >= 8) {
++                const uint32_t size = memory.read32(state + 4, pc) | (static_cast<uint32_t>(byte) << ((counter - 8) * 8));
++                memory.write32(state + 4, size, pc);
++            }
++            --hlen;
++            ++consumed;
++            if (hlen == 0) {
++                if (counter != 0) {
++                    returned_early = true;
++                }
++                break;
++            }
++        }
++        if (bad) {
++            finish(-1);
++            return;
++        }
++        if (!returned_early || counter == 0) {
++            const int32_t limit = static_cast<int32_t>(memory.read32(state + 8, pc));
++            const int32_t size = static_cast<int32_t>(memory.read32(state + 4, pc));
++            if (counter == 0 && limit > 0 && limit < size) {
++                memory.write32(state + 4, static_cast<uint32_t>(limit), pc);
++            }
++        }
++        if (consumed < 0) {
++            finish(consumed);
++            return;
++        }
++        len -= consumed;
++        src += consumed;
++        if (len == 0) {
++            if (memory.read8(state + 0x16, pc) != 0) {
++                finish(-1);
++            } else {
++                finish(static_cast<int32_t>(memory.read32(state + 4, pc)));
++            }
++            return;
++        }
++    }
++
++    int32_t remaining = static_cast<int32_t>(memory.read32(state + 4, pc));
++    uint32_t saved = memory.read8(state + 0xE, pc);
++    uint32_t dst = memory.read32(state, pc);
++    uint32_t code = memory.read8(state + 0xD, pc);
++    uint32_t mask = memory.read8(state + 0xC, pc);
++    uint32_t phase = memory.read32(state + 0x10, pc);
++    uint32_t dist = memory.read16(state + 0x14, pc);
++    const uint32_t limit_flag = memory.read32(state + 8, pc);
++
++    const auto copy = [&](uint32_t count) {
++        for (uint32_t i = 0; i < count; ++i) {
++            memory.write8(dst + i, memory.read8(dst + i - dist, pc), pc);
++        }
++        dst += count;
++        work += 4ull * count;
++    };
++
++    if (remaining > 0) {
++        for (;;) {
++            if (phase == 2) {
++                uint32_t n = memory.read8(src, pc) + 0x12u;
++                ++src;
++                --len;
++                if (n > static_cast<uint32_t>(remaining)) {
++                    if (limit_flag == 0) {
++                        finish(-2);
++                        return;
++                    }
++                    n = static_cast<uint32_t>(remaining) & 0xFFFFu;
++                }
++                remaining -= static_cast<int32_t>(n);
++                copy(n);
++                phase = 0;
++                if (len == 0) break;
++            } else if (phase == 1) {
++                const uint32_t pair = (saved << 8) | memory.read8(src, pc);
++                ++src;
++                --len;
++                dist = (pair & 0xFFFu) + 1;
++                const uint32_t nibble = pair >> 12;
++                if (nibble == 0) {
++                    phase = 2;
++                    if (len == 0) break;
++                } else {
++                    uint32_t n = nibble + 2;
++                    if (n > static_cast<uint32_t>(remaining)) {
++                        if (limit_flag == 0) {
++                            finish(-2);
++                            return;
++                        }
++                        n = static_cast<uint32_t>(remaining) & 0xFFFFu;
++                    }
++                    remaining -= static_cast<int32_t>(n);
++                    copy(n);
++                    phase = 0;
++                    if (len == 0) break;
++                }
++            } else {
++                if (mask == 0) {
++                    --len;
++                    mask = 0x80;
++                    code = memory.read8(src, pc);
++                    ++src;
++                    if (len == 0) break;
++                }
++                if ((code & mask) != 0) {
++                    memory.write8(dst, memory.read8(src, pc), pc);
++                    ++src;
++                    ++dst;
++                    --remaining;
++                    --len;
++                    mask >>= 1;
++                    work += 6;
++                } else {
++                    saved = memory.read8(src, pc);
++                    mask >>= 1;
++                    --len;
++                    phase = 1;
++                    ++src;
++                }
++                if (len == 0) break;
++            }
++            if (remaining <= 0) break;
++        }
++    }
++    memory.write32(state, dst, pc);
++    memory.write8(state + 0xD, static_cast<uint8_t>(code), pc);
++    memory.write8(state + 0xC, static_cast<uint8_t>(mask), pc);
++    memory.write32(state + 0x10, phase, pc);
++    memory.write8(state + 0xE, static_cast<uint8_t>(saved), pc);
++    memory.write32(state + 4, static_cast<uint32_t>(remaining), pc);
++    memory.write16(state + 0x14, static_cast<uint16_t>(dist), pc);
++    if (remaining == 0 && limit_flag == 0 && static_cast<uint32_t>(len) > 0x20u) {
++        finish(-1);
++        return;
++    }
++    finish(remaining);
++}
++
++// LOCAL (SM3DW bring-up) diagnostic hooks: skip a guest function and return a constant in r3.
++// These do NOT emulate the function; they exist to find out what the game does next.
++void return_zero(CPUContext& cpu, GuestMemory&) {
++    cpu.gpr[3] = 0;
++    cpu.instruction_count += 2;
++    cpu.pc = cpu.lr;
++}
++void return_one(CPUContext& cpu, GuestMemory&) {
++    cpu.gpr[3] = 1;
++    cpu.instruction_count += 2;
++    cpu.pc = cpu.lr;
++}
++
+ struct NamedHook {
+     std::string_view name;
+     NativeThunk thunk;
+ };
+ 
+ // Sorted by name so native_hook_names() can hand out a view of it directly.
+-constexpr std::array<NamedHook, 1> kNativeHooks{{
++constexpr std::array<NamedHook, 4> kNativeHooks{{
++    {"ReturnOne", &return_one},
++    {"ReturnZero", &return_zero},
+     {"Yaz0Decode", &yaz0_decode},
++    {"Yaz0DecodeStream", &yaz0_decode_stream},
+ }};
+ } // namespace
+ 
